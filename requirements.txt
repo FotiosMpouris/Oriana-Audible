@@ -1,4 +1,3 @@
-# requirements.txt
 streamlit>=1.28
 openai>=1.0
 requests>=2.28
