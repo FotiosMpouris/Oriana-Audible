@@ -48,21 +48,30 @@ def fetch_article_content(url):
         logging.error(f"Invalid URL format: {url}")
         return None, "Invalid URL format provided."
 
-    # --- Define User-Agent and Config ---
-    # Use a common browser user-agent string
-    browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    request_headers = {'User-Agent': browser_user_agent}
+    # --- Define More Realistic Browser Headers ---
+    browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36' # Slightly newer UA
+    request_headers = {
+        'User-Agent': browser_user_agent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br', # Let requests handle decompression
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'DNT': '1', # Do Not Track
+        # 'Referer': urlparse(url).scheme + "://" + urlparse(url).netloc + "/", # Sometimes adding a Referer helps, but can also cause issues. Uncomment cautiously.
+    }
 
     try:
         # --- Configure newspaper3k ---
         config = Config()
-        config.browser_user_agent = browser_user_agent
-        config.request_timeout = 15 # Increase timeout slightly
-        config.fetch_images = False # Optional: disable image fetching to speed up/reduce errors
+        config.browser_user_agent = browser_user_agent # Use the same UA
+        config.request_timeout = 15
+        config.fetch_images = False # Keep disabled
 
         # --- Initialize Article with config ---
+        # Note: newspaper3k might not use all headers from our dict, primarily UA
         article = NewspaperArticle(url, config=config)
-        article.download()
+        article.download() # This might still fail with 403
         article.parse()
 
         # Check if text is substantial enough
@@ -80,12 +89,12 @@ def fetch_article_content(url):
     # Then try fallback for certain types of errors (like download/parse failures)
     except Exception as newspaper_err:
         logging.warning(f"Newspaper3k failed for {url}: {newspaper_err}. Trying basic requests fallback.")
-        # --- Fallback using requests + BeautifulSoup ---
+        # --- Fallback using requests + BeautifulSoup with Enhanced Headers ---
         try:
-            logging.info(f"Executing requests fallback for: {url}")
-            # --- Use Headers in Fallback Request ---
-            response = requests.get(url, timeout=15, headers=request_headers)
-            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+            logging.info(f"Executing requests fallback for: {url} with enhanced headers.")
+            # --- Use Enhanced Headers in Fallback Request ---
+            response = requests.get(url, timeout=20, headers=request_headers) # Increased timeout slightly
+            response.raise_for_status() # Still raise for bad status codes
 
             soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -95,7 +104,6 @@ def fetch_article_content(url):
                 page_title = soup.title.string.strip()
 
             # Basic paragraph extraction - find main content area if possible
-            # This is very site-specific, but common tags might be 'article', 'main', divs with specific IDs/classes
             main_content = soup.find('article') or soup.find('main') or soup.body # Fallback to body
             if main_content:
                 paragraphs = main_content.find_all('p')
@@ -122,7 +130,7 @@ def fetch_article_content(url):
             error_detail = f"Error: {req_e}"
             status_code = getattr(getattr(req_e, 'response', None), 'status_code', None)
             if status_code == 403:
-                 error_detail = "Access denied (403 Forbidden). Site may require login/subscription or block automated scripts."
+                 error_detail = "Access denied (403 Forbidden). Site likely uses advanced bot detection (e.g., JavaScript checks, IP blocking) or requires login/subscription."
             elif status_code == 404:
                  error_detail = "Page not found (404)."
             elif status_code:
