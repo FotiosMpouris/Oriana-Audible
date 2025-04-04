@@ -4,8 +4,6 @@
 
 Oriana is a web application built with Streamlit that allows you to summarize online articles and listen to either the full text or the summary. Add articles via URL or by pasting text, customize the reading voice and speed, and download the generated audio for offline listening.
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://YOUR_STREAMLIT_APP_URL_HERE) <-- **Replace with your deployed app URL!**
-
 ## Features
 
 *   **Add Articles via URL:** Fetch content directly from online articles.
