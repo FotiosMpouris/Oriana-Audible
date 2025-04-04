@@ -1,19 +1,20 @@
 # mainfunctions.py
 import requests
-from newspaper import Article as NewspaperArticle  # Renamed to avoid conflict
+from newspaper import Article as NewspaperArticle, Config # Import Config
 from openai import OpenAI
 import streamlit as st
 import time
 import os
 import logging
 from urllib.parse import urlparse # To create valid filenames from URLs
+from bs4 import BeautifulSoup # Make sure BeautifulSoup is imported for fallback
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- Configuration ---
 # Directory to store temporary audio files (Streamlit Cloud has ephemeral storage)
-AUDIO_DIR = "temp_audio" 
+AUDIO_DIR = "temp_audio"
 if not os.path.exists(AUDIO_DIR):
     os.makedirs(AUDIO_DIR)
 
@@ -36,58 +37,107 @@ def get_valid_filename(url):
     return filename[:max_len]
 
 # --- Core Functions ---
+
 def fetch_article_content(url):
     """
     Fetches and extracts the main content and title of an article from a URL.
-    Returns a dictionary {'title': title, 'text': text} or None if fails.
+    Returns a dictionary {'title': title, 'text': text} or None, error_message if fails.
     """
     logging.info(f"Attempting to fetch article from: {url}")
     if not is_valid_url(url):
         logging.error(f"Invalid URL format: {url}")
         return None, "Invalid URL format provided."
-        
-    try:
-        article = NewspaperArticle(url)
-        article.download()
-        # Set a timeout for parsing to prevent hanging
-        article.parse()
-        
-        if not article.text:
-            logging.warning(f"Could not extract text from: {url}")
-            # Try fetching with requests as a fallback for basic text
-            try:
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-                response = requests.get(url, timeout=10, headers=headers)
-                response.raise_for_status() # Raise an exception for bad status codes
-                # Very basic extraction if newspaper fails
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(response.text, 'html.parser')
-                paragraphs = soup.find_all('p')
-                fallback_text = '\n'.join([p.get_text() for p in paragraphs])
-                if fallback_text:
-                     logging.info(f"Using fallback text extraction for: {url}")
-                     return {
-                         "title": article.title if article.title else url, 
-                         "text": fallback_text
-                     }, None
-                else:
-                     return None, f"Could not extract content using newspaper3k or basic parsing from: {url}"
-            except requests.exceptions.RequestException as e:
-                 logging.error(f"Requests fallback failed for {url}: {e}")
-                 return None, f"Failed to fetch the article content after fallback attempt from {url}. Error: {e}"
-            except Exception as e:
-                 logging.error(f"Fallback parsing failed for {url}: {e}")
-                 return None, f"An error occurred during fallback content parsing for {url}."
 
-        logging.info(f"Successfully fetched title: '{article.title}' from {url}")
+    # --- Define User-Agent and Config ---
+    # Use a common browser user-agent string
+    browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    request_headers = {'User-Agent': browser_user_agent}
+
+    try:
+        # --- Configure newspaper3k ---
+        config = Config()
+        config.browser_user_agent = browser_user_agent
+        config.request_timeout = 15 # Increase timeout slightly
+        config.fetch_images = False # Optional: disable image fetching to speed up/reduce errors
+
+        # --- Initialize Article with config ---
+        article = NewspaperArticle(url, config=config)
+        article.download()
+        article.parse()
+
+        # Check if text is substantial enough
+        if not article.text or len(article.text) < 50: # Added minimum length check
+            logging.warning(f"Newspaper3k extracted minimal or no text ({len(article.text or '')} chars) from: {url}. Trying basic requests fallback.")
+            raise ValueError("Newspaper3k failed to extract sufficient text.") # Raise exception to trigger fallback
+
+        logging.info(f"Successfully fetched title: '{article.title}' from {url} using newspaper3k")
         return {
             "title": article.title if article.title else url, # Use URL as fallback title
             "text": article.text
-        }, None # No error message
+        }, None
 
-    except Exception as e:
-        logging.error(f"Error fetching or parsing article {url}: {e}")
-        return None, f"Failed to process the article from {url}. Error: {e}"
+    # Catching specific exceptions can be better, but broad Exception first
+    # Then try fallback for certain types of errors (like download/parse failures)
+    except Exception as newspaper_err:
+        logging.warning(f"Newspaper3k failed for {url}: {newspaper_err}. Trying basic requests fallback.")
+        # --- Fallback using requests + BeautifulSoup ---
+        try:
+            logging.info(f"Executing requests fallback for: {url}")
+            # --- Use Headers in Fallback Request ---
+            response = requests.get(url, timeout=15, headers=request_headers)
+            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Try to get title from <title> tag
+            page_title = url # Default title is URL
+            if soup.title and soup.title.string:
+                page_title = soup.title.string.strip()
+
+            # Basic paragraph extraction - find main content area if possible
+            # This is very site-specific, but common tags might be 'article', 'main', divs with specific IDs/classes
+            main_content = soup.find('article') or soup.find('main') or soup.body # Fallback to body
+            if main_content:
+                paragraphs = main_content.find_all('p')
+            else:
+                 paragraphs = soup.find_all('p') # If no main area found, search all 'p' tags
+
+            fallback_text = '\n'.join([p.get_text(" ", strip=True) for p in paragraphs if p.get_text(strip=True)]) # Added strip=True
+
+            if fallback_text and len(fallback_text) > 50: # Check fallback text length too
+                logging.info(f"Using fallback text extraction for: {url}")
+                return {
+                    "title": page_title,
+                    "text": fallback_text
+                }, None
+            else:
+                 logging.error(f"Fallback failed to extract sufficient paragraph text (found {len(fallback_text)} chars) from: {url}")
+                 # Construct error message based on original error if possible
+                 original_error_msg = f"Newspaper3k error: {newspaper_err}"
+                 return None, f"Could not extract substantial content using newspaper3k or basic parsing from: {url}. {original_error_msg}"
+
+        except requests.exceptions.RequestException as req_e:
+            logging.error(f"Requests fallback failed for {url}: {req_e}")
+            # Make error message more informative based on status code
+            error_detail = f"Error: {req_e}"
+            status_code = getattr(getattr(req_e, 'response', None), 'status_code', None)
+            if status_code == 403:
+                 error_detail = "Access denied (403 Forbidden). Site may require login/subscription or block automated scripts."
+            elif status_code == 404:
+                 error_detail = "Page not found (404)."
+            elif status_code:
+                 error_detail = f"HTTP Error {status_code}."
+
+            final_error_msg = f"Failed to fetch article content from {url}. {error_detail}"
+            # Include original newspaper error if different and informative
+            if str(newspaper_err) not in final_error_msg:
+                 final_error_msg += f" (Initial newspaper error: {newspaper_err})"
+
+            return None, final_error_msg
+        except Exception as fallback_parse_err:
+            logging.error(f"Fallback parsing failed for {url}: {fallback_parse_err}")
+            return None, f"An error occurred during fallback content parsing for {url}. Error: {fallback_parse_err}"
+
 
 def summarize_text(text, api_key):
     """
@@ -95,20 +145,20 @@ def summarize_text(text, api_key):
     Returns the summary text or None if fails.
     """
     logging.info("Attempting to summarize text...")
-    if not text:
-        logging.warning("No text provided for summarization.")
-        return None, "Cannot summarize empty text."
-        
+    if not text or len(text.strip()) < 100: # Add length check here too
+        logging.warning(f"Text too short ({len(text.strip())} chars) for meaningful summarization.")
+        return "Content too short to summarize effectively.", None # Return message, no error
+
     try:
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
             model="gpt-3.5-turbo", # You can change the model if needed (e.g., "gpt-4")
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that summarizes articles concisely."},
-                {"role": "user", "content": f"Please summarize the following article content:\n\n{text}"}
+                {"role": "system", "content": "You are a helpful assistant that summarizes articles concisely and accurately."},
+                {"role": "user", "content": f"Please summarize the following article content in 2-4 clear sentences:\n\n{text}"} # Adjusted prompt
             ],
             temperature=0.5, # Adjust for creativity vs. factuality
-            max_tokens=200 # Adjust based on desired summary length
+            max_tokens=250 # Increased slightly for flexibility
         )
         summary = response.choices[0].message.content.strip()
         logging.info("Successfully generated summary.")
@@ -117,13 +167,14 @@ def summarize_text(text, api_key):
         logging.error(f"Error calling OpenAI API for summarization: {e}")
         return None, f"Failed to summarize the text. OpenAI API error: {e}"
 
+
 def generate_audio(text, api_key, base_filename, identifier):
     """
     Generates audio from text using OpenAI TTS API and saves it to a unique file.
     Returns the path to the saved audio file or None if fails.
     """
     logging.info(f"Attempting to generate audio for: {base_filename}_{identifier}")
-    if not text:
+    if not text or not text.strip():
         logging.warning("No text provided for audio generation.")
         return None, "Cannot generate audio for empty text."
 
@@ -135,16 +186,39 @@ def generate_audio(text, api_key, base_filename, identifier):
 
     try:
         client = OpenAI(api_key=api_key)
+        # Ensure text isn't excessively long (OpenAI TTS has limits, ~4096 chars)
+        # Simple truncation - better approach might be chunking, but adds complexity
+        max_tts_chars = 4000
+        if len(text) > max_tts_chars:
+             logging.warning(f"Text for TTS exceeds {max_tts_chars} chars. Truncating.")
+             text_to_speak = text[:max_tts_chars]
+             # Optionally, add an indication that it was truncated
+             # text_to_speak += "\n[Content truncated due to length limit for audio generation]"
+        else:
+             text_to_speak = text
+
         response = client.audio.speech.create(
             model="tts-1",       # Standard quality, faster
             # model="tts-1-hd",  # Higher quality, slower
             voice="alloy",     # Choose a voice: alloy, echo, fable, onyx, nova, shimmer
-            input=text,
+            input=text_to_speak,
             response_format="mp3" # Specify mp3 format
         )
 
         # Stream the response to the file
         response.stream_to_file(filepath)
+
+        # Check if file was actually created and has size
+        if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+             logging.error(f"Audio file generation appeared successful but file is missing or empty: {filepath}")
+             # Clean up empty file if it exists
+             if os.path.exists(filepath):
+                 try:
+                     os.remove(filepath)
+                 except OSError:
+                     pass # Ignore error during cleanup
+             return None, "Failed to create a valid audio file."
+
 
         logging.info(f"Successfully generated audio and saved to: {filepath}")
         return filepath, None
@@ -158,17 +232,30 @@ def generate_audio(text, api_key, base_filename, identifier):
                  logging.error(f"Error removing potentially corrupt audio file {filepath}: {rm_err}")
         return None, f"Failed to generate audio. OpenAI API error: {e}"
 
+
 def cleanup_audio_files(files_to_keep):
     """Removes audio files from AUDIO_DIR not in the list of files_to_keep."""
     logging.info(f"Running audio cleanup. Keeping: {files_to_keep}")
+    if not os.path.exists(AUDIO_DIR):
+        logging.warning(f"Audio directory {AUDIO_DIR} not found during cleanup.")
+        return # Nothing to clean if directory doesn't exist
+
     try:
         all_audio_files = [os.path.join(AUDIO_DIR, f) for f in os.listdir(AUDIO_DIR) if f.endswith(".mp3")]
-        for f in all_audio_files:
-            if f not in files_to_keep:
+        kept_files_count = 0
+        removed_files_count = 0
+        for f_path in all_audio_files:
+            # Check if the *full path* is in the set of paths to keep
+            if f_path not in files_to_keep:
                 try:
-                    os.remove(f)
-                    logging.info(f"Removed old audio file: {f}")
+                    os.remove(f_path)
+                    logging.info(f"Removed old audio file: {f_path}")
+                    removed_files_count += 1
                 except OSError as e:
-                    logging.error(f"Error removing audio file {f}: {e}")
+                    logging.error(f"Error removing audio file {f_path}: {e}")
+            else:
+                kept_files_count += 1
+        logging.info(f"Audio cleanup complete. Kept {kept_files_count} files, removed {removed_files_count} files.")
+
     except Exception as e:
-        logging.error(f"Error during audio cleanup: {e}")
+        logging.error(f"Error during audio cleanup scan: {e}")
