@@ -1,4 +1,3 @@
-# packages.txt
 libxml2-dev
 libxslt-dev
 ffmpeg
