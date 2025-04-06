@@ -15,7 +15,7 @@ import time
 
 # --- Page Configuration ---
 st.set_page_config(
-    page_title="Oriana - Article Summarizer & Reader",
+    page_title="Oriana - Audible mp3 Creator",
     page_icon="✨",
     layout="wide"
 )
