@@ -12,10 +12,11 @@ import os
 import logging
 import re
 import time
+import base64 # <-- Added for Base64 encoding
 
 # --- Page Configuration ---
 st.set_page_config(
-    page_title="Oriana - Audible mp3 Creator",
+    page_title="Oriana - Article Summarizer & Reader",
     page_icon="✨",
     layout="wide"
 )
@@ -43,9 +44,10 @@ with st.expander("ℹ️ How to Use Oriana & Important Notes"):
     *   Use the dropdown menu under "Your Articles" to select an article.
     *   Click "View Summary" to read the generated summary text.
     *   Click "▶️ Read Summary" or "▶️ Read Full" to generate audio using the settings in the sidebar.
-        *   **Audio Generation:** This calls the OpenAI API and may take a few moments (especially for full articles). A spinner will appear.
-        *   **Playback/Download:** Once generation finishes, the app reruns. **You may need to click the 'Read...' button again** to display the audio player (if your browser supports it) and the essential **"⬇️ Download MP3"** button.
-        *   **Download Button:** This is the most reliable way to play audio, especially on mobile, or to save it for later (e.g., listening in the car).
+        *   **Audio Generation:** This calls the OpenAI API and may take a few moments (especially for full articles with chunking). A spinner will appear.
+        *   **Playback/Download:** Once generation finishes, the app reruns. The audio controls ("Try Playing Directly" and "Download MP3") will appear below the action buttons.
+        *   **Try Playing Directly:** Attempts to open the audio in your browser or a native player (may work inconsistently on mobile or with very large files).
+        *   **Download MP3:** Reliably saves the MP3 file to your device for offline playback. Recommended for large files or if direct play fails.
 
     **Audio Settings (Sidebar):**
     *   Choose a **Voice** and playback **Speed** *before* generating audio.
@@ -55,7 +57,7 @@ with st.expander("ℹ️ How to Use Oriana & Important Notes"):
     *   **Persistence:** Audio files are **not saved permanently** between sessions. They exist only while the app is running in your browser. Use the Download button to save files you want to keep.
     *   **Language:** Oriana tries to summarize in the article's original language. TTS (audio) works best for English.
     *   **Costs:** This app uses OpenAI API calls (summary, audio), consuming credits from the provided API key.
-    *   **Troubleshooting:** If URL fetching fails, use Paste Text. If audio fails, check errors, API key status, and try again. Use the Download button if the player gives errors.
+    *   **Troubleshooting:** If URL fetching fails, use Paste Text. If audio fails, check errors, API key status, and try again. Use the Download button if the "Try Play" link gives errors.
     """)
 
 # --- Constants & Options ---
@@ -65,12 +67,18 @@ TTS_SPEEDS = {"Normal": 1.0, "Slightly Faster": 1.15, "Faster": 1.25, "Fastest":
 
 # --- Check for OpenAI API Key ---
 try:
+    # Ensure secrets handling is robust
+    if "openai" not in st.secrets or "api_key" not in st.secrets["openai"]:
+         raise KeyError("OpenAI API key not found in secrets.toml. Expected [openai] section with api_key.")
     openai_api_key = st.secrets["openai"]["api_key"]
     if not openai_api_key or not openai_api_key.startswith("sk-"):
-        raise ValueError("Invalid API Key format or missing")
+        raise ValueError("Invalid API Key format or missing value.")
+except (KeyError, ValueError) as e:
+    st.error(f"OpenAI API key configuration error in Streamlit secrets: {e}. Please ensure secrets.toml has `[openai]` section with `api_key = 'sk-...'` and it is valid.")
+    st.stop() # Stop execution if key is invalid or missing
 except Exception as e:
-    st.error(f"OpenAI API key error in Streamlit secrets: {e}. Please ensure `[openai]` section with `api_key = 'sk-...'` exists and is valid.")
-    st.stop() # Stop execution if key is invalid
+     st.error(f"An unexpected error occurred reading secrets: {e}")
+     st.stop()
 
 # --- Initialize Session State ---
 # Using .setdefault is a concise way to initialize if key doesn't exist
@@ -168,7 +176,7 @@ with tab1:
     # URL Input with Clear Button using Callback
     col_url_input, col_url_clear = st.columns([4, 1])
     with col_url_input:
-        st.text_input("URL Input:", key="url_input", label_visibility="collapsed", placeholder="Enter URL of online article", disabled=st.session_state.processing)
+        st.text_input("URL:", key="url_input", label_visibility="collapsed", placeholder="Enter URL of online article", disabled=st.session_state.processing)
     with col_url_clear:
         st.button("Clear URL", key="clear_url_btn", help="Clear the URL input field",
                   on_click=clear_url_callback, # Use callback
@@ -190,7 +198,7 @@ with tab2:
     # Manual Title Input with Clear Button using Callback
     col_title_input, col_title_clear = st.columns([4, 1])
     with col_title_input:
-        st.text_input("Title Input:", key="manual_title_input", label_visibility="collapsed", placeholder="Enter a Title for the article", disabled=st.session_state.processing)
+        st.text_input("Title:", key="manual_title_input", label_visibility="collapsed", placeholder="Enter a Title for the article", disabled=st.session_state.processing)
     with col_title_clear:
         st.button("Clear Title", key="clear_title_btn", help="Clear the Title field",
                   on_click=clear_title_callback, # Use callback
@@ -199,7 +207,7 @@ with tab2:
     # Manual Text Input with Clear Button using Callback
     col_text_input, col_text_clear = st.columns([4, 1])
     with col_text_input:
-        st.text_area("Text Input:", height=200, key="manual_text_input", label_visibility="collapsed", placeholder="Paste the full article text here", disabled=st.session_state.processing)
+        st.text_area("Pasted Text:", height=200, key="manual_text_input", label_visibility="collapsed", placeholder="Paste the full article text here", disabled=st.session_state.processing)
     with col_text_clear:
         st.button("Clear Text", key="clear_text_btn", help="Clear the Pasted Text field",
                   on_click=clear_text_callback, # Use callback
@@ -236,13 +244,25 @@ if st.session_state.processing:
                 manual_data = st.session_state.get("manual_data")
                 if manual_data and manual_data.get('text'): # Ensure text exists
                     summary, summary_error = summarize_text(manual_data['text'], openai_api_key)
+                    if summary is None and summary_error: # Handle case where summary fails but returns error
+                         final_summary = None
+                         final_error = f"Summarization failed: {summary_error}"
+                    elif summary_error: # Handle case where summary returns but with a non-fatal error message
+                         final_summary = summary
+                         final_error = f"Processing note: {summary_error}" # e.g., "too short to summarize"
+                    else: # Success
+                         final_summary = summary
+                         final_error = None
+
                     article_data_to_add = {
                         'id': manual_data['id'], 'title': manual_data['title'], 'full_text': manual_data['text'],
-                        'summary': summary, 'error': summary_error, 'is_manual': True,
+                        'summary': final_summary, 'error': final_error, 'is_manual': True,
                         'full_audio_path': None, 'summary_audio_path': None
                     }
-                    if summary_error: process_error_msg = f"Summarization error: {summary_error}"
-                    else: process_success_message = f"Manual article '{manual_data['title']}' processed."
+                    if final_error and final_summary is None: process_error_msg = final_error
+                    elif not final_error: process_success_message = f"Manual article '{manual_data['title']}' processed."
+                    # If final_error exists but summary also exists, don't show top-level error, let it be shown with article
+
                 else: process_error_msg = "Error retrieving valid manual data for processing."
             else: # Process URL
                 url_to_process = target_id
@@ -252,25 +272,42 @@ if st.session_state.processing:
                         process_error_msg = f"URL Processing Error: {fetch_error or 'Could not retrieve content.'}"
                     else:
                         summary, summary_error = summarize_text(content_data['text'], openai_api_key)
+                        if summary is None and summary_error:
+                            final_summary = None
+                            combined_error = f"Fetch OK. Summarization failed: {summary_error}"
+                        elif summary_error:
+                            final_summary = summary
+                            combined_error = f"Fetch OK. Summary note: {summary_error}"
+                        else:
+                            final_summary = summary
+                            combined_error = None # Only fetch error matters if it existed before this point
+
+                        # Prioritize fetch error if it occurred
+                        final_processing_error = fetch_error or combined_error
+
                         article_data_to_add = {
                             'id': url_to_process, 'title': content_data['title'], 'full_text': content_data['text'],
-                            'summary': summary, 'error': fetch_error or summary_error, 'is_manual': False,
+                            'summary': final_summary, 'error': final_processing_error, 'is_manual': False,
                             'full_audio_path': None, 'summary_audio_path': None
                          }
-                        if summary_error: process_error_msg = f"Summarization error: {summary_error}"
-                        # Only set success if no specific error occurred during URL processing either
-                        if not fetch_error and not summary_error:
-                             process_success_message = f"Article '{content_data['title']}' processed."
-                        elif fetch_error: # If fetch failed, report that primarily
-                             process_error_msg = f"URL Fetch Error: {fetch_error}"
+                        # Set success/error messages for display after rerun
+                        if fetch_error: process_error_msg = f"URL Fetch Error: {fetch_error}"
+                        elif final_processing_error and final_summary is None: process_error_msg = f"Summarization error: {summary_error}"
+                        elif not final_processing_error: process_success_message = f"Article '{content_data['title']}' processed."
 
                 else: process_error_msg = "Error: No URL target found for processing."
 
             # Add to state list if data was prepared
             if article_data_to_add:
-                 st.session_state.articles.append(article_data_to_add)
-                 st.session_state.selected_article_id = article_data_to_add['id'] # Select the newly added one
-                 cleanup_audio_files(get_active_audio_paths()) # Cleanup old audio
+                 # Check for duplicates again just before adding
+                 if not any(a['id'] == article_data_to_add['id'] for a in st.session_state.articles):
+                      st.session_state.articles.append(article_data_to_add)
+                      st.session_state.selected_article_id = article_data_to_add['id'] # Select the newly added one
+                      cleanup_audio_files(get_active_audio_paths()) # Cleanup old audio
+                 else:
+                      process_warning_msg = f"Article with ID '{article_data_to_add['id']}' already exists, skipping add."
+                      logging.warning(process_warning_msg)
+                      st.session_state.last_process_warning = process_warning_msg # Use a different state var?
 
         except Exception as e:
             # Catch any unexpected errors during the processing block
@@ -284,6 +321,11 @@ if st.session_state.processing:
              # Store messages to display *after* rerun clears spinner
              st.session_state.last_process_success = process_success_message
              st.session_state.last_process_error = process_error_msg
+             # Clear inputs only on successful add or specific user action
+             # if process_success_message:
+             #      st.session_state.url_input = "" # Maybe clear only the one used?
+             #      st.session_state.manual_title_input = ""
+             #      st.session_state.manual_text_input = ""
              st.rerun() # Rerun to exit processing state and show results
 
 # --- Display Processing Results (if any from last run) ---
@@ -293,7 +335,10 @@ if 'last_process_success' in st.session_state and st.session_state.last_process_
 if 'last_process_error' in st.session_state and st.session_state.last_process_error:
     st.error(st.session_state.last_process_error)
     del st.session_state.last_process_error # Clear after showing
-
+# Consider adding the warning display if used:
+# if 'last_process_warning' in st.session_state and st.session_state.last_process_warning:
+#     st.warning(st.session_state.last_process_warning)
+#     del st.session_state.last_process_warning
 
 # --- Display and Interact with Articles ---
 st.header("Your Articles")
@@ -330,14 +375,18 @@ else:
             # Display Title and Source more clearly
             st.subheader(f"{article_data.get('title', 'No Title')}")
             st.caption(f"Source: {'Manually Pasted Text' if article_data.get('is_manual', False) else article_data.get('id', 'Unknown URL')}")
-            # Display processing errors non-intrusively if summary failed
-            if article_data.get('error') and not article_data.get('summary'):
+            # Display processing errors non-intrusively if they occurred (even if summary exists)
+            if article_data.get('error'):
                  st.warning(f"Processing Note: {article_data['error']}")
 
             # Expander for Summary Text
             with st.expander("View Summary Text"):
-                 summary_text_display = article_data.get('summary', "No summary generated or available.")
-                 st.write(summary_text_display)
+                 # Provide clearer message if summary is None or empty
+                 summary_text_display = article_data.get('summary')
+                 if summary_text_display:
+                      st.write(summary_text_display)
+                 else:
+                      st.info("No summary could be generated for this article (e.g., text too short, or processing error occurred).")
 
             # --- Action Buttons ---
             col1, col2, col3 = st.columns([1, 1, 1])
@@ -345,29 +394,49 @@ else:
             button_key_prefix = get_valid_filename(article_data.get('id', f'no_id_{selected_index}'))[:20]
 
             with col1:
-                read_summary_button = st.button("▶️ Read Summary", key=f"sum_{button_key_prefix}", disabled=st.session_state.processing)
+                # Disable button if no summary text exists
+                read_summary_button = st.button(
+                    "▶️ Read Summary",
+                    key=f"sum_{button_key_prefix}",
+                    disabled=st.session_state.processing or not article_data.get('summary')
+                )
+                if not article_data.get('summary'):
+                     col1.caption("(Summary unavailable)")
+
+
             with col2:
-                 read_full_button = st.button("▶️ Read Full", key=f"full_{button_key_prefix}", disabled=st.session_state.processing)
+                 # Disable button if no full text exists
+                 read_full_button = st.button(
+                      "▶️ Read Full",
+                      key=f"full_{button_key_prefix}",
+                      disabled=st.session_state.processing or not article_data.get('full_text')
+                 )
+                 # Display proactive warning for long text only if button not active
+                 full_text_len = len(article_data.get('full_text', ''))
+                 if full_text_len > 4000 and not read_full_button: # Use 4000 as threshold aligns with TTS chunking
+                     col2.caption("⚠️ Full text is long.")
+                 elif not article_data.get('full_text'):
+                     col2.caption("(Full text unavailable)")
+
+
             with col3:
                 delete_button = st.button("🗑️ Delete", key=f"del_{button_key_prefix}", disabled=st.session_state.processing)
 
-            # Display proactive warning for long text only if button not active
-            if len(article_data.get('full_text', '')) > 3500 and not read_full_button:
-                 col2.caption("⚠️ Full text long.")
-
             # --- Audio Handling Placeholders ---
-            audio_player_placeholder = st.empty()
+            # Placeholder for status messages (like errors or 'generating')
             audio_status_placeholder = st.empty()
-            download_placeholder = st.empty()
+            # Placeholder for the play/download controls
+            audio_controls_placeholder = st.empty()
 
-            # --- handle_audio_request Function (Key Logic) ---
+            # --- MODIFIED handle_audio_request Function (Key Logic) ---
             # This function encapsulates generating or finding audio and displaying controls
             def handle_audio_request(text_type, text_content):
-                """Generates or retrieves audio, displays player/download."""
+                """Generates or retrieves audio, displays controls (Try Play Link + Download)."""
                 audio_path_key = f"{text_type}_audio_path" # e.g., 'summary_audio_path'
                 audio_path = article_data.get(audio_path_key)
                 audio_ready = False
                 audio_bytes = None
+                play_link_html = "" # Initialize play link HTML
 
                 # 1. Check if valid audio already exists in this session
                 if audio_path and os.path.exists(audio_path):
@@ -376,7 +445,6 @@ else:
                             audio_bytes = f.read()
                         if audio_bytes: # Ensure file wasn't empty
                             audio_ready = True
-                            audio_status_placeholder.success(f"Audio ready for {text_type}.")
                         else: # File exists but is empty
                              os.remove(audio_path) # Clean up empty file
                              st.session_state.articles[selected_index][audio_path_key] = None # Invalidate path
@@ -392,15 +460,15 @@ else:
                 # 2. If audio not ready (doesn't exist or failed to load), generate it
                 if not audio_ready:
                     # Check if text content is valid before trying to generate
-                    is_valid_summary = text_type == "summary" and text_content and text_content not in ["Summary could not be generated.", "Content too short to summarize effectively."]
+                    is_valid_summary = text_type == "summary" and text_content # Simplified check - empty handled by generate_audio
                     is_valid_full = text_type == "full" and text_content
                     if not (is_valid_summary or is_valid_full):
                          audio_status_placeholder.warning(f"No valid {text_type} text available to generate audio.")
                          return # Don't proceed with generation
 
                     # Proceed with generation
-                    audio_status_placeholder.info(f"Generating {text_type} audio...")
-                    with st.spinner(f"Generating {text_type} audio..."):
+                    audio_status_placeholder.info(f"Generating {text_type} audio... (May take time for long text)")
+                    with st.spinner(f"Generating {text_type} audio... This can take a while for long articles."):
                         try:
                             filepath, audio_error = generate_audio(
                                 text_content, openai_api_key, article_data['id'], text_type,
@@ -431,40 +499,64 @@ else:
 
                 # 3. If audio is ready (either existed or was just generated in previous run), display controls
                 if audio_ready and audio_bytes:
-                    try:
-                        # Attempt to display the built-in player
-                        audio_player_placeholder.audio(audio_bytes, format="audio/mp3")
-                    except Exception as player_e:
-                        # Catch potential errors with st.audio itself (e.g., unsupported format/codec on browser)
-                        audio_player_placeholder.warning(f"Audio player failed: {player_e}. Please use the Download button.")
+                    # Clear status messages now that controls are shown
+                    audio_status_placeholder.empty()
 
-                    # Always show download button if audio bytes are available
-                    download_filename = f"{get_valid_filename(article_data['title'])}_{text_type}.mp3"
-                    download_placeholder.download_button(
-                        label=f"⬇️ Download {text_type.capitalize()} MP3",
-                        data=audio_bytes,
-                        file_name=download_filename,
-                        mime="audio/mpeg",
-                        key=f"dl_{button_key_prefix}_{text_type}" # Unique key for download button
-                    )
+                    # --- Prepare Base64 Link for "Try Play" ---
+                    try:
+                        b64 = base64.b64encode(audio_bytes).decode()
+                        # target="_blank" attempts to open in new tab/context
+                        # Add download attribute as a hint for browsers, though behavior varies
+                        play_link_html = f'<a href="data:audio/mpeg;base64,{b64}" target="_blank" download="{get_valid_filename(article_data["title"])}_{text_type}.mp3">▶️ Try Playing Directly</a>'
+                    except Exception as e:
+                        logging.error(f"Error creating Base64 play link: {e}")
+                        play_link_html = "<i>Error creating play link.</i>"
+
+                    # --- Use columns for layout within the audio_controls_placeholder ---
+                    col_play, col_download = audio_controls_placeholder.columns([1, 1])
+
+                    with col_play:
+                        col_play.markdown(play_link_html, unsafe_allow_html=True)
+                        # Add a caption warning about potential issues, especially size/mobile
+                        col_play.caption("(Opens in new tab/player. May fail on large files or some mobile browsers)")
+
+                    with col_download:
+                        download_filename = f"{get_valid_filename(article_data['title'])}_{text_type}.mp3"
+                        col_download.download_button(
+                            label=f"⬇️ Download MP3", # Consistent label
+                            data=audio_bytes,
+                            file_name=download_filename,
+                            mime="audio/mpeg",
+                            key=f"dl_{button_key_prefix}_{text_type}" # Unique key for download button
+                        )
 
             # --- Trigger Audio Handling Based on Button Clicks ---
             # Check which button was pressed *this script run* (will be True if clicked in previous run)
+            active_audio_request = None
             if read_summary_button:
-                handle_audio_request("summary", article_data.get('summary'))
+                active_audio_request = ("summary", article_data.get('summary'))
             elif read_full_button: # Use elif to prevent both triggering in one cycle
-                handle_audio_request("full", article_data.get('full_text'))
+                active_audio_request = ("full", article_data.get('full_text'))
+
+            if active_audio_request:
+                 handle_audio_request(active_audio_request[0], active_audio_request[1])
             else:
                  # --- If no generation button clicked, proactively check for existing audio ---
                  # This helps display controls immediately if audio was generated previously in the session
+                 # Check which audio (summary or full) might already exist and display controls for it.
+                 # Prioritize showing controls for 'full' if both exist? Or maybe the last one generated?
+                 # Let's check both and potentially display controls for whichever is found first (summary preferred slightly)
                  summary_audio_path = article_data.get('summary_audio_path')
                  full_audio_path = article_data.get('full_audio_path')
-                 # Check summary audio path first
+
+                 displayed_controls = False
                  if summary_audio_path and os.path.exists(summary_audio_path):
                      handle_audio_request("summary", article_data.get('summary')) # Call handler to display controls
+                     displayed_controls = True
                  # If summary audio didn't exist or failed, check full audio path
-                 elif full_audio_path and os.path.exists(full_audio_path):
+                 if not displayed_controls and full_audio_path and os.path.exists(full_audio_path):
                      handle_audio_request("full", article_data.get('full_text')) # Call handler to display controls
+
 
             # --- Delete Logic ---
             if delete_button:
@@ -491,11 +583,12 @@ else:
 
                     # Reset selection, clear UI elements, and rerun
                     st.session_state.selected_article_id = None
-                    audio_player_placeholder.empty()
                     audio_status_placeholder.empty()
-                    download_placeholder.empty()
+                    audio_controls_placeholder.empty() # Clear the controls area too
                     st.rerun()
                 else:
                     st.error("Could not find the article to delete (index mismatch). Please refresh.")
 
 # --- End of Script ---
+# Optional: Add a footer or final cleanup call if needed
+# cleanup_audio_files(get_active_audio_paths()) # Run cleanup periodically? Maybe on session end? (Not straightforward in Streamlit)
