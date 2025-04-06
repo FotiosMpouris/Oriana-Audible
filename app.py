@@ -16,12 +16,12 @@ import base64
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Oriana Audible",
-    page_icon="🎙️",
+    page_icon="🎙️",  # Mic icon for audio focus
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- Custom CSS ---
+# --- Custom CSS for Visual Polish ---
 st.markdown("""
     <style>
     .main { background-color: #f9f9f9; padding: 20px; border-radius: 10px; }
@@ -36,19 +36,19 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Header ---
+# --- Application Title and Logo ---
 LOGO_PATH = "orianalogo.png"
 col_logo, col_title = st.columns([1, 4])
 with col_logo:
     if os.path.exists(LOGO_PATH):
-        st.image(LOGO_PATH, width=120)
+        st.image(LOGO_PATH, width=150)
     else:
-        st.warning("Logo missing!")
+        st.warning("orianalogo.png not found.")
 with col_title:
     st.title("Oriana Audible")
     st.caption("Inspired by Oriana Fallaci—Turn Articles into Audio Magic")
 
-# --- Instructions ---
+# --- Instructional Expander ---
 with st.expander("ℹ️ How to Use Oriana Audible", expanded=True):
     st.markdown("""
     **Welcome to Oriana Audible: Turn Text into Audio Bliss!**
@@ -65,12 +65,11 @@ with st.expander("ℹ️ How to Use Oriana Audible", expanded=True):
     2. **Explore Your Articles:**
        - Pick an article from the "Your Articles" dropdown.
        - **Read the Summary:** Click **"View Summary Text"** for a quick AI-generated overview—ideal for deciding if it’s worth a full listen.
-       - **Listen Up:** Hit **"▶️ Read Summary"** or **"▶️ Read Full"** to hear it aloud with your chosen voice and speed (set in the sidebar).
+       - **Listen Up:** Hit **"▶️ Read Summary"** or **"▶️ Read Full"** to generate audio. A small player will appear below to play it directly in the app!
          - *Heads-Up:* Audio generation uses OpenAI’s API—summaries are fast, but full articles (especially long ones) may take a minute or two. Watch the spinner!
 
-    3. **Get Your Audio:**
-       - **▶️ Try Playing Directly:** Opens in new tab or media player—handy but quirky on some mobiles or with big files.
-       - **⬇️ Download MP3:** The foolproof choice! Save it to your device for offline listening—perfect for commutes or gym sessions.
+    3. **Save Your Audio:**
+       - **⬇️ Download MP3:** After playing, download the MP3 to your device for offline listening—perfect for commutes or gym sessions.
 
     4. **Tweak the Experience:**
        - **Sidebar Settings:** Pick a voice (e.g., "Nova" for crisp, "Onyx" for deep) and speed (Normal to Fastest) before generating audio.
@@ -92,7 +91,7 @@ MAX_ARTICLES = 5
 TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
 TTS_SPEEDS = {"Normal": 1.0, "Slightly Faster": 1.15, "Faster": 1.25, "Fastest": 1.5}
 
-# --- API Key Check ---
+# --- Check for OpenAI API Key ---
 try:
     if "openai" not in st.secrets or "api_key" not in st.secrets["openai"]:
         raise KeyError("OpenAI API key not found in secrets.toml.")
@@ -100,10 +99,10 @@ try:
     if not openai_api_key or not openai_api_key.startswith("sk-"):
         raise ValueError("Invalid API Key format.")
 except Exception as e:
-    st.error(f"API Key Error: {e}. Add a valid key in secrets.toml under [openai].")
+    st.error(f"OpenAI API key error: {e}. Please ensure secrets.toml has `[openai]` section with `api_key = 'sk-...'`.")
     st.stop()
 
-# --- Session State Initialization ---
+# --- Initialize Session State ---
 st.session_state.setdefault('articles', [])
 st.session_state.setdefault('selected_article_id', None)
 st.session_state.setdefault('processing', False)
@@ -115,7 +114,7 @@ st.session_state.setdefault('manual_text_input', "")
 st.session_state.setdefault('processing_target', None)
 st.session_state.setdefault('manual_data', None)
 
-# --- Callbacks ---
+# --- Callback Functions for Clearing Inputs ---
 def clear_url_callback():
     st.session_state.url_input = ""
 
@@ -125,7 +124,7 @@ def clear_title_callback():
 def clear_text_callback():
     st.session_state.manual_text_input = ""
 
-# --- Helpers ---
+# --- Helper Functions ---
 def get_article_index(article_id):
     for i, article in enumerate(st.session_state.articles):
         if article.get('id') == article_id:
@@ -152,46 +151,55 @@ def create_manual_id(title):
             final_id = f"{base_id}_{count}"
             count += 1
         return final_id
-    return f"manual_{int(time.time())}"
+    base_id = f"manual_{int(time.time())}"
+    existing_ids = {a['id'] for a in st.session_state.articles}
+    final_id = base_id
+    count = 1
+    while final_id in existing_ids:
+        final_id = f"{base_id}_{count}"
+        count += 1
+    return final_id
 
-# --- Sidebar ---
+# --- Sidebar Audio Settings ---
 with st.sidebar:
     st.header("🎧 Audio Settings")
     st.session_state.selected_voice = st.selectbox(
-        "Voice", TTS_VOICES, index=TTS_VOICES.index(st.session_state.selected_voice),
-        help="Choose a voice for your audio."
+        "Select Voice:", TTS_VOICES,
+        index=TTS_VOICES.index(st.session_state.selected_voice),
+        key="voice_selector"
     )
     current_speed_name = [k for k, v in TTS_SPEEDS.items() if v == st.session_state.selected_speed][0]
-    selected_speed_name = st.select_slider(
-        "Speed", options=list(TTS_SPEEDS.keys()), value=current_speed_name,
-        help="Adjust playback speed."
+    selected_speed_name = st.sidebar.select_slider(
+        "Select Speed:", options=list(TTS_SPEEDS.keys()),
+        value=current_speed_name,
+        key="speed_selector"
     )
     st.session_state.selected_speed = TTS_SPEEDS[selected_speed_name]
-    st.info("Voices are English-optimized but can read other languages.")
+    st.sidebar.warning("Note: Voices are primarily English-trained.")
 
-# --- Input Area ---
-st.header("📝 Add Your Article")
-tab1, tab2 = st.tabs(["🌐 From URL", "📋 Paste Text"])
+# --- Main Input Area ---
+st.header("📝 Add New Article")
+tab1, tab2 = st.tabs(["🌐 Add via URL", "📋 Add by Pasting Text"])
 
 with tab1:
-    col_url, col_clear = st.columns([3, 1])
-    with col_url:
-        st.text_input("Article URL", key="url_input", placeholder="e.g., https://news.com/story")
-    with col_clear:
-        st.button("Clear", on_click=clear_url_callback, key="clear_url")
+    col_url_input, col_url_clear = st.columns([4, 1])
+    with col_url_input:
+        st.text_input("URL:", key="url_input", placeholder="Enter URL of online article", disabled=st.session_state.processing)
+    with col_url_clear:
+        st.button("Clear URL", key="clear_url_btn", on_click=clear_url_callback, disabled=st.session_state.processing)
     add_url_button = st.button("Add Article from URL", key="add_url", disabled=st.session_state.processing or not st.session_state.url_input)
 
 with tab2:
-    col_title, col_clear_title = st.columns([3, 1])
-    with col_title:
-        st.text_input("Title", key="manual_title_input", placeholder="e.g., My Article")
-    with col_clear_title:
-        st.button("Clear", on_click=clear_title_callback, key="clear_title")
-    col_text, col_clear_text = st.columns([3, 1])
-    with col_text:
-        st.text_area("Text", key="manual_text_input", height=150, placeholder="Paste article text here...")
-    with col_clear_text:
-        st.button("Clear", on_click=clear_text_callback, key="clear_text")
+    col_title_input, col_title_clear = st.columns([4, 1])
+    with col_title_input:
+        st.text_input("Title:", key="manual_title_input", placeholder="Enter a Title for the article", disabled=st.session_state.processing)
+    with col_title_clear:
+        st.button("Clear Title", key="clear_title_btn", on_click=clear_title_callback, disabled=st.session_state.processing)
+    col_text_input, col_text_clear = st.columns([4, 1])
+    with col_text_input:
+        st.text_area("Pasted Text:", height=200, key="manual_text_input", placeholder="Paste the full article text here", disabled=st.session_state.processing)
+    with col_text_clear:
+        st.button("Clear Text", key="clear_text_btn", on_click=clear_text_callback, disabled=st.session_state.processing)
     add_manual_button = st.button("Add Manual Article", key="add_manual", disabled=st.session_state.processing or not (st.session_state.manual_text_input and st.session_state.manual_title_input))
 
 # --- Processing Logic ---
@@ -257,7 +265,7 @@ if st.session_state.processing:
                         elif not final_processing_error:
                             process_success_message = f"Article '{content_data['title']}' processed."
         except Exception as e:
-            process_error_msg = f"Unexpected Error: {e}"
+            process_error_msg = f"Unexpected error: {e}"
             logging.error(f"Processing error: {e}", exc_info=True)
         finally:
             st.session_state.processing = False
@@ -265,25 +273,27 @@ if st.session_state.processing:
             st.session_state.manual_data = None
             st.session_state.last_process_success = process_success_message
             st.session_state.last_process_error = process_error_msg
-            if article_data_to_add and not any(a['id'] == article_data_to_add['id'] for a in st.session_state.articles):
-                st.session_state.articles.append(article_data_to_add)
-                st.session_state.selected_article_id = article_data_to_add['id']
-                cleanup_audio_files(get_active_audio_paths())
+            if article_data_to_add:
+                if not any(a['id'] == article_data_to_add['id'] for a in st.session_state.articles):
+                    st.session_state.articles.append(article_data_to_add)
+                    st.session_state.selected_article_id = article_data_to_add['id']
+                    cleanup_audio_files(get_active_audio_paths())
             st.rerun()
 
-if add_url_button and not st.session_state.processing:
+if add_url_button:
+    url_to_add = st.session_state.url_input
     if len(st.session_state.articles) >= MAX_ARTICLES:
-        st.warning(f"Maximum {MAX_ARTICLES} articles reached.")
-    elif any(article.get('id') == st.session_state.url_input for article in st.session_state.articles):
-        st.warning("This URL is already added.")
+        st.warning(f"Maximum {MAX_ARTICLES} articles allowed.")
+    elif any(article.get('id') == url_to_add for article in st.session_state.articles):
+        st.warning("This URL has already been added.")
     else:
         st.session_state.processing = True
-        st.session_state.processing_target = st.session_state.url_input
+        st.session_state.processing_target = url_to_add
         st.rerun()
 
-if add_manual_button and not st.session_state.processing:
+if add_manual_button:
     if len(st.session_state.articles) >= MAX_ARTICLES:
-        st.warning(f"Maximum {MAX_ARTICLES} articles reached.")
+        st.warning(f"Maximum {MAX_ARTICLES} articles allowed.")
     else:
         manual_title = st.session_state.manual_title_input
         manual_text = st.session_state.manual_text_input
@@ -293,7 +303,7 @@ if add_manual_button and not st.session_state.processing:
         st.session_state.processing_target = manual_id
         st.rerun()
 
-# --- Display Results ---
+# --- Display Processing Results ---
 if 'last_process_success' in st.session_state and st.session_state.last_process_success:
     st.success(st.session_state.last_process_success)
     del st.session_state.last_process_success
@@ -301,20 +311,23 @@ if 'last_process_error' in st.session_state and st.session_state.last_process_er
     st.error(st.session_state.last_process_error)
     del st.session_state.last_process_error
 
-# --- Articles Section ---
+# --- Display and Interact with Articles ---
 st.header("🎙️ Your Articles")
 if not st.session_state.articles:
-    st.info("Add an article above to get started!")
+    st.info("No articles added yet. Use the sections above.")
 else:
-    article_options = {a['id']: f"{a['title']} ({'Pasted' if a.get('is_manual', False) else a.get('id', 'Unknown')[:20]}...)" for a in st.session_state.articles}
+    article_options = {a['id']: f"{a['title']} ({'Pasted' if a.get('is_manual', False) else a.get('id', 'Unknown ID')[:30]}...)" for a in st.session_state.articles}
     current_ids = list(article_options.keys())
     if st.session_state.selected_article_id not in current_ids:
         st.session_state.selected_article_id = current_ids[0] if current_ids else None
 
     selected_id = st.selectbox(
-        "Select an Article", current_ids,
-        format_func=lambda article_id: article_options.get(article_id, "Unknown"),
-        index=current_ids.index(st.session_state.selected_article_id) if st.session_state.selected_article_id in current_ids else 0
+        "Choose article to view/read:",
+        options=current_ids,
+        format_func=lambda article_id: article_options.get(article_id, "Unknown Article"),
+        index=current_ids.index(st.session_state.selected_article_id) if st.session_state.selected_article_id in current_ids else 0,
+        key="article_selector",
+        label_visibility="collapsed"
     )
     if selected_id != st.session_state.selected_article_id:
         st.session_state.selected_article_id = selected_id
@@ -324,21 +337,42 @@ else:
         selected_index = get_article_index(st.session_state.selected_article_id)
         if selected_index != -1:
             article_data = st.session_state.articles[selected_index]
-            st.subheader(article_data.get('title', 'Untitled'))
-            st.caption(f"Source: {'Pasted Text' if article_data.get('is_manual', False) else article_data.get('id', 'Unknown')}")
+            st.subheader(f"{article_data.get('title', 'No Title')}")
+            st.caption(f"Source: {'Manually Pasted Text' if article_data.get('is_manual', False) else article_data.get('id', 'Unknown URL')}")
             if article_data.get('error'):
-                st.warning(f"Note: {article_data['error']}")
+                st.warning(f"Processing Note: {article_data['error']}")
 
-            with st.expander("📄 Summary", expanded=False):
-                summary = article_data.get('summary')
-                st.write(summary if summary else "No summary available.")
+            with st.expander("View Summary Text"):
+                summary_text_display = article_data.get('summary')
+                if summary_text_display:
+                    st.write(summary_text_display)
+                else:
+                    st.info("No summary could be generated.")
 
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3 = st.columns([1, 1, 1])
             button_key_prefix = get_valid_filename(article_data.get('id', f'no_id_{selected_index}'))[:20]
+
             with col1:
-                read_summary_button = st.button("▶️ Read Summary", key=f"sum_{button_key_prefix}", disabled=st.session_state.processing or not article_data.get('summary'))
+                read_summary_button = st.button(
+                    "▶️ Read Summary",
+                    key=f"sum_{button_key_prefix}",
+                    disabled=st.session_state.processing or not article_data.get('summary')
+                )
+                if not article_data.get('summary'):
+                    col1.caption("(Summary unavailable)")
+
             with col2:
-                read_full_button = st.button("▶️ Read Full", key=f"full_{button_key_prefix}", disabled=st.session_state.processing or not article_data.get('full_text'))
+                read_full_button = st.button(
+                    "▶️ Read Full",
+                    key=f"full_{button_key_prefix}",
+                    disabled=st.session_state.processing or not article_data.get('full_text')
+                )
+                full_text_len = len(article_data.get('full_text', ''))
+                if full_text_len > 4000 and not read_full_button:
+                    col2.caption("⚠️ Full text is long.")
+                elif not article_data.get('full_text'):
+                    col2.caption("(Full text unavailable)")
+
             with col3:
                 delete_button = st.button("🗑️ Delete", key=f"del_{button_key_prefix}", disabled=st.session_state.processing)
 
@@ -360,38 +394,47 @@ else:
                         else:
                             os.remove(audio_path)
                             st.session_state.articles[selected_index][audio_path_key] = None
-                            audio_status_placeholder.warning("Previous audio invalid. Regenerate.")
+                            audio_status_placeholder.warning("Previous audio file was invalid.")
                     except Exception as e:
-                        audio_status_placeholder.warning(f"Audio load error: {e}. Regenerating needed.")
+                        audio_status_placeholder.warning(f"Could not load audio: {e}.")
                         st.session_state.articles[selected_index][audio_path_key] = None
 
-                if not audio_ready and text_content:
+                if not audio_ready:
+                    is_valid_summary = text_type == "summary" and text_content
+                    is_valid_full = text_type == "full" and text_content
+                    if not (is_valid_summary or is_valid_full):
+                        audio_status_placeholder.warning(f"No valid {text_type} text available.")
+                        return
+
                     audio_status_placeholder.info(f"Generating {text_type} audio...")
-                    with st.spinner(f"Creating {text_type} audio..."):
-                        filepath, audio_error = generate_audio(
-                            text_content, openai_api_key, article_data['id'], text_type,
-                            voice=st.session_state.selected_voice, speed=st.session_state.selected_speed
-                        )
-                        if audio_error:
-                            audio_status_placeholder.error(f"Error: {audio_error}")
+                    with st.spinner(f"Generating {text_type} audio..."):
+                        try:
+                            filepath, audio_error = generate_audio(
+                                text_content, openai_api_key, article_data['id'], text_type,
+                                voice=st.session_state.selected_voice, speed=st.session_state.selected_speed
+                            )
+                            if audio_error:
+                                audio_status_placeholder.error(f"Audio Generation Error: {audio_error}")
+                                st.session_state.articles[selected_index][audio_path_key] = None
+                            elif filepath:
+                                st.session_state.articles[selected_index][audio_path_key] = filepath
+                                st.rerun()
+                        except Exception as e:
+                            audio_status_placeholder.error(f"Generation Error: {e}")
+                            logging.error(f"TTS Exception: {e}", exc_info=True)
                             st.session_state.articles[selected_index][audio_path_key] = None
-                        elif filepath:
-                            st.session_state.articles[selected_index][audio_path_key] = filepath
-                            st.rerun()
+                            return
 
                 if audio_ready and audio_bytes:
                     audio_status_placeholder.empty()
-                    col_play, col_dl = audio_controls_placeholder.columns(2)
-                    with col_play:
-                        b64 = base64.b64encode(audio_bytes).decode()
-                        play_link = f'<a href="data:audio/mpeg;base64,{b64}" target="_blank" download="{get_valid_filename(article_data["title"])}_{text_type}.mp3">▶️ Try Playing</a>'
-                        st.markdown(play_link, unsafe_allow_html=True)
-                        st.caption("(May fail on mobile/large files)")
-                    with col_dl:
-                        st.download_button(
-                            "⬇️ Download MP3", audio_bytes, f"{get_valid_filename(article_data['title'])}_{text_type}.mp3",
-                            mime="audio/mpeg", key=f"dl_{button_key_prefix}_{text_type}"
-                        )
+                    audio_controls_placeholder.audio(audio_bytes, format="audio/mpeg")
+                    audio_controls_placeholder.download_button(
+                        label="⬇️ Download MP3",
+                        data=audio_bytes,
+                        file_name=f"{get_valid_filename(article_data['title'])}_{text_type}.mp3",
+                        mime="audio/mpeg",
+                        key=f"dl_{button_key_prefix}_{text_type}"
+                    )
 
             if read_summary_button:
                 handle_audio_request("summary", article_data.get('summary'))
@@ -407,19 +450,25 @@ else:
 
             if delete_button:
                 id_to_delete = article_data['id']
+                logging.info(f"Attempting to delete article: {id_to_delete}")
                 index_to_delete = get_article_index(id_to_delete)
                 if index_to_delete != -1:
-                    deleted_article = st.session_state.articles.pop(index_to_delete)
-                    st.success(f"Deleted '{deleted_article.get('title', 'Untitled')}'")
-                    paths_to_delete = [deleted_article.get('full_audio_path'), deleted_article.get('summary_audio_path')]
+                    deleted_article_data = st.session_state.articles.pop(index_to_delete)
+                    st.success(f"Article '{deleted_article_data.get('title', 'Untitled')}' deleted.")
+                    paths_to_delete = [
+                        deleted_article_data.get('full_audio_path'),
+                        deleted_article_data.get('summary_audio_path')
+                    ]
                     for path in paths_to_delete:
                         if path and os.path.exists(path):
                             try:
                                 os.remove(path)
                                 logging.info(f"Deleted audio file: {path}")
                             except Exception as e:
-                                logging.error(f"Error deleting audio: {e}")
+                                logging.error(f"Error deleting audio file {path}: {e}")
                     st.session_state.selected_article_id = None
                     audio_status_placeholder.empty()
                     audio_controls_placeholder.empty()
                     st.rerun()
+                else:
+                    st.error("Could not find article to delete.")
