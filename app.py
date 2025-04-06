@@ -35,31 +35,43 @@ st.caption("Add articles via URL or paste text, get summaries, and listen or dow
 # Ensure this entire block is present
 with st.expander("ℹ️ How to Use Oriana & Important Notes"):
     st.markdown("""
-    **Adding Articles:**
-    *   **Via URL:** Paste the full web address (URL) of an online article and click "Add Article from URL".
-        *   *Note:* Some websites (like those requiring login/subscription or using strong anti-bot measures) may block access, resulting in an error. Use the "Paste Text" method as a workaround.
-    *   **Via Pasting Text:** Copy the article text from its source, paste it into the "Paste article text" box, provide a Title, and click "Add Manual Article". Use the "Clear" buttons to easily remove previous input.
+**Transform Long Reads into Easy Listens!**
 
-    **Interacting with Articles:**
-    *   Use the dropdown menu under "Your Articles" to select an article.
-    *   Click "View Summary" to read the generated summary text.
-    *   Click "▶️ Read Summary" or "▶️ Read Full" to generate audio using the settings in the sidebar.
-        *   **Audio Generation:** This calls the OpenAI API and may take a few moments (especially for full articles with chunking). A spinner will appear.
-        *   **Playback/Download:** Once generation finishes, the app reruns. The audio controls ("Try Playing Directly" and "Download MP3") will appear below the action buttons.
-        *   **Try Playing Directly:** Attempts to open the audio in your browser or a native player (may work inconsistently on mobile or with very large files).
-        *   **Download MP3:** Reliably saves the MP3 file to your device for offline playback. Recommended for large files or if direct play fails.
+Ever find fascinating articles but lack the time (or energy) to read them? Oriana bridges that gap. Add articles via URL or pasted text, get quick AI-powered summaries, and generate audio versions to listen to anytime, anywhere – perfect for commutes, workouts, or just relaxing.
 
-    **Audio Settings (Sidebar):**
-    *   Choose a **Voice** and playback **Speed** *before* generating audio.
-    *   *Note:* The voices are primarily English-trained and may not sound natural for other languages (like Greek).
+**Adding Articles:**
 
-    **Important Notes:**
-    *   **Persistence:** Audio files are **not saved permanently** between sessions. They exist only while the app is running in your browser. Use the Download button to save files you want to keep.
-    *   **Language:** Oriana tries to summarize in the article's original language. TTS (audio) works best for English.
-    *   **Costs:** This app uses OpenAI API calls (summary, audio), consuming credits from the provided API key.
-    *   **Troubleshooting:** If URL fetching fails, use Paste Text. If audio fails, check errors, API key status, and try again. Use the Download button if the "Try Play" link gives errors.
-    """)
+*   **Via URL:** Paste the full web address (URL) of an online article into the "URL" box and click **"Add Article from URL"**.
+    *   *Heads-up:* Some sites use strong anti-scraping measures or require logins/subscriptions, which might prevent fetching. If you hit an error, the **Paste Text** method is your reliable backup!
+*   **Via Pasting Text:** Copy the article text from its source. Paste it into the "Pasted Text" box, give your article a **Title**, and click **"Add Manual Article"**.
+    *   *Tip:* Use the **"Clear URL"**, **"Clear Title"**, and **"Clear Text"** buttons to quickly reset the input fields.
 
+**Interacting with Your Articles:**
+
+*   **Select:** Choose an article from the dropdown menu under **"Your Articles"**.
+*   **Summarize:** Click **"View Summary Text"** to read the AI-generated summary. This is great for quickly grasping the key points.
+*   **Listen:** Click **"▶️ Read Summary"** or **"▶️ Read Full"** to generate audio using the voice and speed selected in the sidebar.
+    *   **Generation Time:** This calls the OpenAI API. Summaries are quick, but generating audio for **full articles can take several minutes**, especially for very long ones (like white papers!), as Oriana processes the text in chunks. A spinner will show progress.
+    *   **Getting the Audio:** After generation finishes, the app will refresh, and controls will appear below the buttons:
+        *   **▶️ Try Playing Directly:** Clicking this attempts to open the audio in a new browser tab or your device's media player. It's convenient for quick listening but **may not work reliably on all mobile devices or for very large audio files** due to browser limitations.
+        *   **⬇️ Download MP3:** This is the **most reliable** way to get your audio. It saves the MP3 file directly to your device, perfect for offline listening (in the car, on a plane) or if the "Try Play" link doesn't work. **Recommended for large files and mobile use.**
+
+**Audio Settings (Sidebar):**
+
+*   **Choose Voice & Speed:** Select your preferred **Voice** and playback **Speed** *before* clicking the "Read..." buttons.
+*   **Language Note:** The available voices are primarily trained on English. While they *can* read other languages present in the text, the pronunciation might not sound perfectly native (e.g., for Greek text).
+
+**Important Notes & Tips:**
+
+*   **Temporary Files:** Generated audio files **only exist while the app is active in your browser session**. They are **not saved permanently** on the server. Always use the **Download MP3** button to save any audio you want to keep.
+*   **Summarization Language:** Oriana attempts to detect the article's language and summarize in that same language.
+*   **API Costs:** Remember that generating summaries and audio uses the OpenAI API, which consumes credits associated with the provided API key.
+*   **Troubleshooting:**
+    *   URL fetch failed? Use the Paste Text method.
+    *   Audio generation failed? Check for error messages, ensure your API key is valid and has credits, and try again.
+    *   "Try Play" link fails? Use the reliable **Download MP3** button.
+
+""")
 # --- Constants & Options ---
 MAX_ARTICLES = 5
 TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
