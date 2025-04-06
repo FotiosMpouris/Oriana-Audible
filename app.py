@@ -22,32 +22,12 @@ st.set_page_config(
 )
 
 # --- Custom CSS for Visual Enhancements ---
-# Inject CSS to style the 'Try Play' link like a subtle button and add minor tweaks
+# CSS for general layout and minor button adjustments
 st.markdown("""
 <style>
-    /* Style the 'Try Play' link to look like a secondary button */
-    .play-link-button {
-        display: inline-block;
-        padding: 0.3rem 0.75rem; /* Slightly adjust padding */
-        background-color: #f0f2f6; /* Light grey background */
-        color: #31333F; /* Default text color */
-        border: 1px solid rgba(49, 51, 63, 0.2); /* Subtle border */
-        border-radius: 0.5rem; /* Match Streamlit button radius */
-        text-decoration: none; /* Remove underline */
-        margin: 0.1rem 0; /* Add vertical margin */
-        font-weight: 400;
-        font-size: 0.875rem; /* Match Streamlit button font size */
-        text-align: center;
-        transition: all 0.2s ease-in-out; /* Smooth transition on hover */
-    }
-    .play-link-button:hover {
-        border-color: #ff4b4b; /* Streamlit primary color border on hover */
-        color: #ff4b4b; /* Streamlit primary color text on hover */
-        background-color: white; /* Slightly change background */
-    }
-    /* Ensure columns have some minimal gap */
+    /* Ensure columns have some minimal gap and standard buttons look consistent */
     .stButton>button {
-        margin: 0.1rem 0; /* Add slight margin to regular buttons too */
+        margin: 0.1rem 0;
     }
     /* Center the logo and title */
     div[data-testid="stImage"] {
@@ -63,7 +43,11 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] {
         gap: 24px; /* Add more space between tabs */
     }
-
+    /* Style the embedded audio player slightly */
+    audio {
+        width: 100%; /* Make player responsive */
+        margin-bottom: 0.5rem; /* Add space below player */
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -76,42 +60,44 @@ else:
     st.warning("orianalogo.png not found.")
 
 st.title("✨ Oriana: Article Summarizer & Reader ✨")
-st.caption("Turn text into summaries and audio effortlessly.")
+st.caption("Distilling text into summaries and audio narratives.")
 st.divider() # Add a visual separator
 
 # --- Instructional Expander ---
-# Updated instructions with Oriana Fallaci mention and simplified flow
-with st.expander("💡 How to Use Oriana & Important Notes", expanded=False): # Start collapsed
+# Rewritten instructions with more sophisticated tone and revised Fallaci mention
+with st.expander("💡 Oriana: Concept & Usage Guide", expanded=False): # Start collapsed
     st.markdown("""
-    *Inspired by the spirit of journalists like Oriana Fallaci who sought the core of the story, Oriana helps you access information more easily.*
+    *In tribute to the relentless pursuit of truth exemplified by journalists like Oriana Fallaci, this application aims to make information more accessible by transforming written content.*
 
-    Got long articles or documents? Oriana summarizes them and reads them aloud!
+    Oriana allows you to condense lengthy articles or documents into concise summaries and convert them into spoken audio, enabling consumption during commutes, exercise, or any time your eyes need a rest.
 
-    **1. Add Your Content:**
+    **Workflow:**
 
-    *   **🌐 Via URL:** Paste a web link, click **"➕ Add Article from URL"**.
-        *   *(Note: Some sites block automated fetching. If it fails, use the Paste Text option.)*
-    *   **✍️ Via Pasting Text:** Copy text, paste it in, add a **Title**, click **"➕ Add Manual Article"**.
-        *   *(Use the "Clear..." buttons to reset fields.)*
+    **1. Ingest Content:**
 
-    **2. Explore & Listen:**
+    *   **🌐 From the Web (URL):** Provide a direct link to an online article and select **"➕ Add Article from URL"**.
+        *   *(Note: Success depends on the target website's structure and permissions. Direct text pasting is a reliable alternative if fetching fails.)*
+    *   **✍️ From Clipboard (Paste Text):** Copy the desired text, paste it into the designated area, assign a **Title**, and select **"➕ Add Manual Article"**.
+        *   *(Utilize the "Clear" buttons adjacent to input fields for quick resets.)*
 
-    *   **Choose:** Select an article from the **"Your Articles"** dropdown.
-    *   **Summarize:** Expand **"View Summary Text"** to read the AI-generated key points.
+    **2. Engage with the Article:**
+
+    *   **Selection:** Choose an article from the **"Your Articles"** dropdown menu. The details will load below.
+    *   **Review Summary:** Expand the **"📄 View Summary Text"** section to read the AI-generated synopsis.
     *   **Generate Audio:**
-        *   Choose a **Voice** and **Speed** in the sidebar first.
-        *   Click **"▶️ Read Summary"** or **"▶️ Read Full"**.
-        *   *(Audio generation takes time, especially for long text. A spinner will appear.)*
-    *   **Get Audio:** Once ready, controls appear below the action buttons:
-        *   <span class="play-link-button" style="cursor:default; background-color: #e9e9eb;">▶️ Try Playing Directly</span>: Attempts to play in browser/app (best effort, may fail on mobile/large files).
-        *   <button style="pointer-events: none; background-color: #f0f2f6; border: 1px solid rgba(49, 51, 63, 0.2); color: #31333F; border-radius: 0.5rem; padding: 0.3rem 0.75rem; font-size: 0.875rem;">⬇️ Download MP3</button>: **Most reliable way.** Saves the file to your device. **Recommended.**
+        *   First, configure your preferred **Voice** and **Speed** via the sidebar settings.
+        *   Click **"▶️ Read Summary"** or **"▶️ Read Full"** to initiate audio synthesis.
+        *   *(Process Alert: Audio generation, particularly for extensive texts requiring chunking, involves API calls and may take several minutes. A progress indicator will be displayed.)*
+    *   **Access Audio:** Upon completion, the app refreshes, revealing audio controls:
+        *   **Embedded Player:** An audio player will appear directly within the app interface for immediate playback. While convenient, **performance on mobile devices or with exceptionally large audio files (many minutes long) might be inconsistent** due to browser memory and processing limitations.
+        *   **⬇️ Download MP3:** This button provides the most dependable method to obtain the audio. It saves the generated MP3 file to your device, ensuring offline access and optimal playback regardless of file size or device constraints. **Highly recommended, especially for full articles or mobile usage.**
 
-    **Important Points:**
+    **Key Considerations:**
 
-    *   **Audio is Temporary:** Files exist only during your current session. **Download to keep!**
-    *   **Language:** Summaries try to match the article language. TTS voices are English-optimized (pronunciation of other languages may vary).
-    *   **API Costs:** Uses OpenAI API credits.
-    *   **Troubleshooting:** URL fail? Paste text. Play fail? Download!
+    *   **Audio Persistence:** Generated audio files are ephemeral and exist only within your current browser session. **To retain audio, you must download the MP3.**
+    *   **Language Nuances:** Summarization attempts to mirror the source language. TTS voices are primarily English-native; pronunciation of foreign words or non-English text may vary in naturalness.
+    *   **API Usage:** This application utilizes OpenAI API services for summarization and text-to-speech, incurring costs based on usage against the configured API key.
+    *   **Troubleshooting:** If URL fetching encounters issues, resort to pasting text. If embedded playback is problematic, utilize the Download MP3 option.
     """)
 st.divider() # Add a visual separator
 
@@ -195,20 +181,17 @@ st.sidebar.warning("Note: Voices are primarily English-trained.")
 
 # --- Main Input Area ---
 st.subheader("Step 1: Add Article Content")
-# Use icons in tabs
-tab1, tab2 = st.tabs(["🌐 Add via URL", "✍️ Add by Pasting Text"])
+tab1, tab2 = st.tabs(["🌐 Add via URL", "✍️ Add by Pasting Text"]) # Keep icons
 
 with tab1:
     col_url_input, col_url_clear = st.columns([4, 1])
     with col_url_input:
         st.text_input("URL:", key="url_input", label_visibility="collapsed", placeholder="Enter URL of online article", disabled=st.session_state.processing)
     with col_url_clear:
-        # Add icon to clear button? Maybe not standard. Keep simple.
         st.button("Clear", key="clear_url_btn", help="Clear the URL input field",
                   on_click=clear_url_callback, disabled=st.session_state.processing)
 
-    # Make Add button primary and add icon
-    add_url_button = st.button("➕ Add Article from URL", key="add_url", type="primary",
+    add_url_button = st.button("➕ Add Article from URL", key="add_url", type="primary", # Keep primary style
                                disabled=st.session_state.processing or not st.session_state.url_input)
     if add_url_button: # Logic unchanged
         url_to_add = st.session_state.url_input
@@ -234,8 +217,7 @@ with tab2:
         st.button("Clear", key="clear_text_btn", help="Clear the Pasted Text field",
                   on_click=clear_text_callback, disabled=st.session_state.processing)
 
-    # Make Add button primary and add icon
-    add_manual_button = st.button("➕ Add Manual Article", key="add_manual", type="primary",
+    add_manual_button = st.button("➕ Add Manual Article", key="add_manual", type="primary", # Keep primary style
                                   disabled=st.session_state.processing or not st.session_state.manual_text_input or not st.session_state.manual_title_input)
     if add_manual_button: # Logic unchanged
          if len(st.session_state.articles) >= MAX_ARTICLES: st.warning(f"Maximum {MAX_ARTICLES} articles allowed.")
@@ -308,13 +290,13 @@ if st.session_state.processing:
 
 # --- Display Processing Results (Functional code unchanged) ---
 if 'last_process_success' in st.session_state and st.session_state.last_process_success:
-    st.success(st.session_state.last_process_success)
+    st.success(f"✅ {st.session_state.last_process_success}") # Add icon
     del st.session_state.last_process_success
 if 'last_process_error' in st.session_state and st.session_state.last_process_error:
-    st.error(st.session_state.last_process_error)
+    st.error(f"❌ {st.session_state.last_process_error}") # Add icon
     del st.session_state.last_process_error
 if 'last_process_warning' in st.session_state and st.session_state.last_process_warning:
-     st.warning(st.session_state.last_process_warning)
+     st.warning(f"⚠️ {st.session_state.last_process_warning}") # Add icon
      del st.session_state.last_process_warning
 
 st.divider() # Add separator
@@ -331,7 +313,7 @@ else:
         st.session_state.selected_article_id = current_ids[0] if current_ids else None
 
     selected_id = st.selectbox(
-        "Choose article:", # Simplified label
+        "Choose article:", # Keep simplified label
         options=current_ids,
         format_func=lambda article_id: article_options.get(article_id, "Unknown Article"),
         index=current_ids.index(st.session_state.selected_article_id) if st.session_state.selected_article_id in current_ids else 0,
@@ -348,22 +330,21 @@ else:
         if selected_index != -1:
             article_data = st.session_state.articles[selected_index]
 
-            st.subheader(f"{article_data.get('title', 'No Title')}")
+            st.subheader(f"📄 {article_data.get('title', 'No Title')}") # Add icon
             st.caption(f"Source: {'Manually Pasted Text' if article_data.get('is_manual', False) else article_data.get('id', 'Unknown URL')}")
             if article_data.get('error'):
                  st.warning(f"Processing Note: {article_data['error']}")
 
-            with st.expander("📄 View Summary Text"): # Add icon
+            with st.expander("🧐 View Summary Text"): # Changed icon
                  summary_text_display = article_data.get('summary')
                  if summary_text_display: st.write(summary_text_display)
                  else: st.info("No summary could be generated for this article.")
 
-            st.markdown("**Generate Audio:**") # Add sub-heading for clarity
+            st.markdown("**Generate Audio:**") # Keep sub-heading
             col1, col2, col3 = st.columns([1, 1, 1])
             button_key_prefix = get_valid_filename(article_data.get('id', f'no_id_{selected_index}'))[:20]
 
             with col1:
-                # Add icons to buttons
                 read_summary_button = st.button(
                     "▶️ Read Summary", key=f"sum_{button_key_prefix}",
                     disabled=st.session_state.processing or not article_data.get('summary')
@@ -380,24 +361,24 @@ else:
                  elif not article_data.get('full_text'): col2.caption("(Full text unavailable)")
 
             with col3:
-                 # Use secondary type for delete to make it less prominent? Optional.
                  delete_button = st.button("🗑️ Delete Article", key=f"del_{button_key_prefix}",
                                            disabled=st.session_state.processing)
 
-            st.divider() # Separate actions from controls
+            st.divider() # Keep separator
 
             # --- Audio Handling Placeholders ---
             audio_status_placeholder = st.empty()
-            audio_controls_placeholder = st.empty()
+            audio_controls_placeholder = st.empty() # Placeholder for player + download button
 
-            # --- handle_audio_request Function (Functional code unchanged, but uses CSS class) ---
+            # --- REVERTED handle_audio_request Function ---
+            # Uses embedded <audio> tag with Base64 source
             def handle_audio_request(text_type, text_content):
                 audio_path_key = f"{text_type}_audio_path"
                 audio_path = article_data.get(audio_path_key)
                 audio_ready = False
                 audio_bytes = None
-                play_link_html = ""
 
+                # 1. Check cache (Functional code unchanged)
                 if audio_path and os.path.exists(audio_path):
                     try:
                         with open(audio_path, "rb") as f: audio_bytes = f.read()
@@ -413,6 +394,7 @@ else:
                         st.session_state.articles[selected_index][audio_path_key] = None
                         audio_path = None
 
+                # 2. Generate if needed (Functional code unchanged)
                 if not audio_ready:
                     is_valid_summary = text_type == "summary" and text_content
                     is_valid_full = text_type == "full" and text_content
@@ -440,25 +422,42 @@ else:
                             st.session_state.articles[selected_index][audio_path_key] = None
                             return
 
+                # 3. Display **Embedded Player** and Download Button
                 if audio_ready and audio_bytes:
-                    audio_status_placeholder.empty()
-                    try:
-                        b64 = base64.b64encode(audio_bytes).decode()
-                        # Apply the CSS class here!
-                        play_link_html = f'<a href="data:audio/mpeg;base64,{b64}" target="_blank" class="play-link-button" download="{get_valid_filename(article_data["title"])}_{text_type}.mp3">▶️ Try Playing Directly</a>'
-                    except Exception as e:
-                        logging.error(f"Error creating Base64 play link: {e}")
-                        play_link_html = "<i>Error creating play link.</i>"
+                    audio_status_placeholder.empty() # Clear status messages
 
-                    col_play, col_download = audio_controls_placeholder.columns([1, 1])
-                    with col_play:
-                        col_play.markdown(play_link_html, unsafe_allow_html=True)
-                        col_play.caption("(Opens in new tab/player)") # Simplified caption
+                    # Use columns within the placeholder for layout
+                    col_player, col_download = audio_controls_placeholder.columns([3, 1]) # Give player more space
+
+                    with col_player:
+                        try:
+                            # --- Use Embedded Base64 <audio> tag ---
+                            b64 = base64.b64encode(audio_bytes).decode()
+                            audio_html = f"""
+                            <audio controls>
+                                <source src="data:audio/mpeg;base64,{b64}" type="audio/mpeg">
+                                Your browser does not support the audio element. Please use the download button.
+                            </audio>
+                            """
+                            col_player.markdown(audio_html, unsafe_allow_html=True)
+                            # Add warning caption below player
+                            col_player.caption("Playback within the app may struggle on mobile or with very long audio. Use Download if needed.")
+                            # --- End of Embedded Player ---
+                        except Exception as player_e:
+                            col_player.error(f"Error displaying audio player: {player_e}. Please use the Download button.")
+
                     with col_download:
+                        # Align download button vertically if possible (tricky without complex CSS)
+                        # Add extra space above?
+                        col_download.write("") # Little hack for vertical alignment sometimes
                         download_filename = f"{get_valid_filename(article_data['title'])}_{text_type}.mp3"
                         col_download.download_button(
-                            label=f"⬇️ Download MP3", data=audio_bytes, file_name=download_filename, mime="audio/mpeg",
-                            key=f"dl_{button_key_prefix}_{text_type}", help="Save the audio file to your device (Recommended)" # Add tooltip
+                            label=f"⬇️ Download MP3",
+                            data=audio_bytes,
+                            file_name=download_filename,
+                            mime="audio/mpeg",
+                            key=f"dl_{button_key_prefix}_{text_type}",
+                            help="Save the audio file to your device (Recommended)"
                         )
 
             # --- Trigger Audio Handling (Functional code unchanged) ---
@@ -483,7 +482,7 @@ else:
                 index_to_delete = get_article_index(id_to_delete)
                 if index_to_delete != -1:
                     deleted_article_data = st.session_state.articles.pop(index_to_delete)
-                    st.success(f"Article '{deleted_article_data.get('title', 'Untitled')}' deleted.")
+                    st.success(f"✅ Article '{deleted_article_data.get('title', 'Untitled')}' deleted.") # Add icon
                     paths_to_delete = [deleted_article_data.get('full_audio_path'), deleted_article_data.get('summary_audio_path')]
                     for path in paths_to_delete:
                         if path and isinstance(path, str) and os.path.exists(path):
@@ -494,8 +493,8 @@ else:
                     audio_status_placeholder.empty()
                     audio_controls_placeholder.empty()
                     st.rerun()
-                else: st.error("Could not find the article to delete (index mismatch). Please refresh.")
+                else: st.error("❌ Could not find the article to delete (index mismatch). Please refresh.") # Add icon
 
 # --- End of Script ---
 st.divider()
-st.caption("Oriana App - v1.1 (Visual Enhancements)")
+st.caption("Oriana App - v1.2 (Embedded Player UI)")
