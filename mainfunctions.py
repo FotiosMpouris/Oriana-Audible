@@ -330,22 +330,22 @@ def generate_audio(
                 if os.path.exists(chunk_filepath): os.remove(chunk_filepath) # Clean up failed file
 
         # --- NEW Code ---
-except httpx.HTTPStatusError as el_http_err:
-    # This catches HTTP errors like 4xx, 5xx from ElevenLabs via httpx
-    status_code = el_http_err.response.status_code
-    logging.warning(f"ElevenLabs HTTP Error for chunk {i+1}: {el_http_err} (Status: {status_code})")
-    # Fallback triggers: 401 (Auth), 429 (Rate Limit/Quota), 400 (Bad Request - sometimes quota/input), 5xx (Server Error)
-    # You might refine these based on testing.
-    if status_code in [400, 401, 429] or status_code >= 500:
-         logging.warning(f"Falling back to OpenAI TTS for chunk {i+1} due to ElevenLabs HTTP error (Status: {status_code}).")
-         # Don't set chunk_success = True, proceed to fallback
-    else:
+        except httpx.HTTPStatusError as el_http_err:
+        # This catches HTTP errors like 4xx, 5xx from ElevenLabs via httpx
+        status_code = el_http_err.response.status_code
+        logging.warning(f"ElevenLabs HTTP Error for chunk {i+1}: {el_http_err} (Status: {status_code})")
+        # Fallback triggers: 401 (Auth), 429 (Rate Limit/Quota), 400 (Bad Request - sometimes quota/input), 5xx (Server Error)
+        # You might refine these based on testing.
+            if status_code in [400, 401, 429] or status_code >= 500:
+                logging.warning(f"Falling back to OpenAI TTS for chunk {i+1} due to ElevenLabs HTTP error (Status: {status_code}).")
+        # Don't set chunk_success = True, proceed to fallback
+            else:
          # For other HTTP errors (e.g., 403 Forbidden if not auth, 404 not found, etc.)
          # Treat as non-fallback errors for now, log and skip chunk.
-         logging.error(f"Non-fallback ElevenLabs HTTP error for chunk {i+1} (Status: {status_code}). Skipping chunk.")
-         if os.path.exists(chunk_filepath): os.remove(chunk_filepath)
-         overall_error_message = overall_error_message or f"ElevenLabs HTTP error {status_code} on chunk {i+1}"
-         continue # Skip to next chunk
+                logging.error(f"Non-fallback ElevenLabs HTTP error for chunk {i+1} (Status: {status_code}). Skipping chunk.")
+            if os.path.exists(chunk_filepath): os.remove(chunk_filepath)
+                overall_error_message = overall_error_message or f"ElevenLabs HTTP error {status_code} on chunk {i+1}"
+            continue # Skip to next chunk
 # --- End NEW Code ---
         except Exception as el_general_err:
             # Catch other potential errors during ElevenLabs generation
