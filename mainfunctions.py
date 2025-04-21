@@ -18,7 +18,8 @@ from pydub import AudioSegment
 from elevenlabs.client import ElevenLabs
 # mainfunctions.py - Corrected Line 19
 from elevenlabs import Voice, VoiceSettings
-from elevenlabs import APIError as ElevenLabsAPIError # Specific error for fallback check
+# mainfunctions.py - Corrected Line 21
+from elevenlabs.core.api_error import APIError as ElevenLabsAPIError # Specific error for fallback check
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
