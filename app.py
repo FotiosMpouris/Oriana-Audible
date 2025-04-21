@@ -1,4 +1,4 @@
-# app.py
+# app.py (Rewritten with ElevenLabs Integration)
 import streamlit as st
 from mainfunctions import (
     fetch_article_content,
@@ -60,7 +60,7 @@ else:
     st.warning("orianalogo.png not found.")
 
 st.title("✨ Oriana: Article Summarizer & Reader ✨")
-st.caption("Distilling text into summaries and audio narratives.")
+st.caption("Distilling text into summaries and audio narratives. Now with enhanced audio!")
 st.divider() # Add a visual separator
 
 # --- Instructional Expander ---
@@ -69,7 +69,7 @@ with st.expander("💡 Oriana: Concept & Usage Guide", expanded=False): # Start 
     st.markdown("""
     *In tribute to the relentless pursuit of truth exemplified by journalists like Oriana Fallaci, this application aims to make information more accessible by transforming written content.*
 
-    Oriana allows you to condense lengthy articles or documents into concise summaries and convert them into spoken audio, enabling consumption during commutes, exercise, or any time your eyes need a rest.
+    Oriana allows you to condense lengthy articles or documents into concise summaries and convert them into spoken audio, enabling consumption during commutes, exercise, or any time your eyes need a rest. This version prioritizes high-quality audio generation via ElevenLabs, with OpenAI as a reliable fallback.
 
     **Workflow:**
 
@@ -85,9 +85,9 @@ with st.expander("💡 Oriana: Concept & Usage Guide", expanded=False): # Start 
     *   **Selection:** Choose an article from the **"Your Articles"** dropdown menu. The details will load below.
     *   **Review Summary:** Expand the **"📄 View Summary Text"** section to read the AI-generated synopsis.
     *   **Generate Audio:**
-        *   First, configure your preferred **Voice** and **Speed** via the sidebar settings.
+        *   First, configure your preferred **Fallback Voice (OpenAI)** and **Speed** via the sidebar settings. *(Note: The primary audio engine uses a default high-quality voice from ElevenLabs. Speed setting primarily affects the fallback engine).*
         *   Click **"▶️ Read Summary"** or **"▶️ Read Full"** to initiate audio synthesis.
-        *   *(Process Alert: Audio generation, particularly for extensive texts requiring chunking, involves API calls and may take several minutes. A progress indicator will be displayed.)*
+        *   *(Process Alert: Audio generation, particularly for extensive texts requiring chunking, involves API calls (primarily ElevenLabs, potentially OpenAI) and may take several minutes. A progress indicator will be displayed.)*
     *   **Access Audio:** Upon completion, the app refreshes, revealing audio controls:
         *   **Embedded Player:** An audio player will appear directly within the app interface for immediate playback. While convenient, **performance on mobile devices or with exceptionally large audio files (many minutes long) might be inconsistent** due to browser memory and processing limitations.
         *   **⬇️ Download MP3:** This button provides the most dependable method to obtain the audio. It saves the generated MP3 file to your device, ensuring offline access and optimal playback regardless of file size or device constraints. **Highly recommended, especially for full articles or mobile usage.**
@@ -95,36 +95,52 @@ with st.expander("💡 Oriana: Concept & Usage Guide", expanded=False): # Start 
     **Key Considerations:**
 
     *   **Audio Persistence:** Generated audio files are ephemeral and exist only within your current browser session. **To retain audio, you must download the MP3.**
-    *   **Language Nuances:** Summarization attempts to mirror the source language. TTS voices are primarily English-native; pronunciation of foreign words or non-English text may vary in naturalness.
-    *   **API Usage:** This application utilizes OpenAI API services for summarization and text-to-speech, incurring costs based on usage against the configured API key.
+    *   **Language Nuances:** Summarization attempts to mirror the source language. TTS voices (both ElevenLabs and OpenAI) perform best with English; pronunciation of foreign words or non-English text may vary.
+    *   **API Usage:** This application utilizes **ElevenLabs** and **OpenAI API services** for text-to-speech and summarization, incurring costs based on usage against the configured API keys. Fallback to OpenAI TTS occurs if ElevenLabs encounters specific issues (e.g., quota limits).
     *   **Troubleshooting:** If URL fetching encounters issues, resort to pasting text. If embedded playback is problematic, utilize the Download MP3 option.
     """)
 st.divider() # Add a visual separator
 
 # --- Constants & Options ---
 MAX_ARTICLES = 5
-TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
-TTS_SPEEDS = {"Normal": 1.0, "Slightly Faster": 1.15, "Faster": 1.25, "Fastest": 1.5}
+TTS_VOICES_OPENAI = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] # For Fallback
+TTS_SPEEDS = {"Normal": 1.0, "Slightly Faster": 1.15, "Faster": 1.25, "Fastest": 1.5} # Primarily for Fallback
+DEFAULT_ELEVENLABS_VOICE_ID = "Rachel" # Example - Choose a preferred default voice ID
 
-# --- Check for OpenAI API Key (Functional code unchanged) ---
+# --- Check for API Keys ---
+# OpenAI API Key Check (Unchanged)
 try:
     if "openai" not in st.secrets or "api_key" not in st.secrets["openai"]:
          raise KeyError("OpenAI API key not found in secrets.toml. Expected [openai] section with api_key.")
     openai_api_key = st.secrets["openai"]["api_key"]
     if not openai_api_key or not openai_api_key.startswith("sk-"):
-        raise ValueError("Invalid API Key format or missing value.")
+        raise ValueError("Invalid OpenAI API Key format or missing value.")
 except (KeyError, ValueError) as e:
     st.error(f"OpenAI API key configuration error in Streamlit secrets: {e}. Please ensure secrets.toml has `[openai]` section with `api_key = 'sk-...'` and it is valid.")
     st.stop()
 except Exception as e:
-     st.error(f"An unexpected error occurred reading secrets: {e}")
+     st.error(f"An unexpected error occurred reading OpenAI secrets: {e}")
      st.stop()
 
-# --- Initialize Session State (Functional code unchanged) ---
+# ElevenLabs API Key Check (NEW)
+try:
+    if "elevenlabs" not in st.secrets or "api_key" not in st.secrets["elevenlabs"]:
+         raise KeyError("ElevenLabs API key not found in secrets.toml. Expected [elevenlabs] section with api_key.")
+    elevenlabs_api_key = st.secrets["elevenlabs"]["api_key"]
+    if not elevenlabs_api_key: # Add more specific format checks if needed
+        raise ValueError("ElevenLabs API Key value missing.")
+except (KeyError, ValueError) as e:
+    st.error(f"ElevenLabs API key configuration error in Streamlit secrets: {e}. Please ensure secrets.toml has `[elevenlabs]` section with `api_key = 'YOUR_KEY_HERE'` and it is valid.")
+    st.stop()
+except Exception as e:
+     st.error(f"An unexpected error occurred reading ElevenLabs secrets: {e}")
+     st.stop()
+
+# --- Initialize Session State (Functional code unchanged, added default voice) ---
 st.session_state.setdefault('articles', [])
 st.session_state.setdefault('selected_article_id', None)
 st.session_state.setdefault('processing', False)
-st.session_state.setdefault('selected_voice', TTS_VOICES[0])
+st.session_state.setdefault('selected_voice_openai', TTS_VOICES_OPENAI[0]) # Renamed key for clarity
 st.session_state.setdefault('selected_speed', TTS_SPEEDS["Normal"])
 st.session_state.setdefault('url_input', "")
 st.session_state.setdefault('manual_title_input', "")
@@ -163,25 +179,26 @@ def create_manual_id(title):
         final_id = f"{base_id}_{count}"; count += 1
     return final_id
 
-# --- Sidebar Audio Settings (Functional code unchanged) ---
+# --- Sidebar Audio Settings (Updated labels for clarity) ---
 st.sidebar.header("🎧 Audio Settings")
-st.session_state.selected_voice = st.sidebar.selectbox(
-    "Select Voice:", options=TTS_VOICES,
-    index=TTS_VOICES.index(st.session_state.selected_voice),
-    key="voice_selector"
+st.sidebar.info(f"Primary TTS uses ElevenLabs (Voice: {DEFAULT_ELEVENLABS_VOICE_ID}). Settings below apply to the OpenAI fallback.")
+st.session_state.selected_voice_openai = st.sidebar.selectbox(
+    "Select Fallback Voice (OpenAI):", options=TTS_VOICES_OPENAI,
+    index=TTS_VOICES_OPENAI.index(st.session_state.selected_voice_openai),
+    key="voice_selector_openai" # Updated key
 )
 current_speed_name = [k for k, v in TTS_SPEEDS.items() if v == st.session_state.selected_speed][0]
 selected_speed_name = st.sidebar.select_slider(
-    "Select Speed:", options=list(TTS_SPEEDS.keys()),
+    "Select Fallback Speed:", options=list(TTS_SPEEDS.keys()),
     value=current_speed_name,
     key="speed_selector"
 )
 st.session_state.selected_speed = TTS_SPEEDS[selected_speed_name]
-st.sidebar.warning("Note: Voices are primarily English-trained.")
+st.sidebar.warning("Note: Both TTS engines perform best with English.")
 
-# --- Main Input Area ---
+# --- Main Input Area (Functional code unchanged) ---
 st.subheader("Step 1: Add Article Content")
-tab1, tab2 = st.tabs(["🌐 Add via URL", "✍️ Add by Pasting Text"]) # Keep icons
+tab1, tab2 = st.tabs(["🌐 Add via URL", "✍️ Add by Pasting Text"])
 
 with tab1:
     col_url_input, col_url_clear = st.columns([4, 1])
@@ -191,9 +208,9 @@ with tab1:
         st.button("Clear", key="clear_url_btn", help="Clear the URL input field",
                   on_click=clear_url_callback, disabled=st.session_state.processing)
 
-    add_url_button = st.button("➕ Add Article from URL", key="add_url", type="primary", # Keep primary style
+    add_url_button = st.button("➕ Add Article from URL", key="add_url", type="primary",
                                disabled=st.session_state.processing or not st.session_state.url_input)
-    if add_url_button: # Logic unchanged
+    if add_url_button:
         url_to_add = st.session_state.url_input
         if len(st.session_state.articles) >= MAX_ARTICLES: st.warning(f"Maximum {MAX_ARTICLES} articles allowed.")
         elif any(a.get('id') == url_to_add for a in st.session_state.articles): st.warning("This URL has already been added.")
@@ -217,9 +234,9 @@ with tab2:
         st.button("Clear", key="clear_text_btn", help="Clear the Pasted Text field",
                   on_click=clear_text_callback, disabled=st.session_state.processing)
 
-    add_manual_button = st.button("➕ Add Manual Article", key="add_manual", type="primary", # Keep primary style
+    add_manual_button = st.button("➕ Add Manual Article", key="add_manual", type="primary",
                                   disabled=st.session_state.processing or not st.session_state.manual_text_input or not st.session_state.manual_title_input)
-    if add_manual_button: # Logic unchanged
+    if add_manual_button:
          if len(st.session_state.articles) >= MAX_ARTICLES: st.warning(f"Maximum {MAX_ARTICLES} articles allowed.")
          else:
             manual_title = st.session_state.manual_title_input
@@ -230,7 +247,7 @@ with tab2:
             st.session_state.processing_target = manual_id
             st.rerun()
 
-# --- Processing Logic (Functional code unchanged) ---
+# --- Processing Logic (Summarization part unchanged) ---
 if st.session_state.processing:
     target_id = st.session_state.get('processing_target')
     is_manual_processing = target_id and target_id.startswith("manual_")
@@ -241,10 +258,11 @@ if st.session_state.processing:
     with st.spinner(spinner_message):
         article_data_to_add = None
         try:
+            # Fetch & Summarize Logic (remains the same, uses only OpenAI API key)
             if is_manual_processing:
                 manual_data = st.session_state.get("manual_data")
                 if manual_data and manual_data.get('text'):
-                    summary, summary_error = summarize_text(manual_data['text'], openai_api_key)
+                    summary, summary_error = summarize_text(manual_data['text'], openai_api_key) # Still uses OpenAI key
                     if summary is None and summary_error: final_summary, final_error = None, f"Summarization failed: {summary_error}"
                     elif summary_error: final_summary, final_error = summary, f"Processing note: {summary_error}"
                     else: final_summary, final_error = summary, None
@@ -258,7 +276,7 @@ if st.session_state.processing:
                     content_data, fetch_error = fetch_article_content(url_to_process)
                     if fetch_error or not content_data: process_error_msg = f"URL Processing Error: {fetch_error or 'Could not retrieve content.'}"
                     else:
-                        summary, summary_error = summarize_text(content_data['text'], openai_api_key)
+                        summary, summary_error = summarize_text(content_data['text'], openai_api_key) # Still uses OpenAI key
                         if summary is None and summary_error: final_summary, combined_error = None, f"Fetch OK. Summarization failed: {summary_error}"
                         elif summary_error: final_summary, combined_error = summary, f"Fetch OK. Summary note: {summary_error}"
                         else: final_summary, combined_error = summary, None
@@ -268,6 +286,8 @@ if st.session_state.processing:
                         elif final_processing_error and final_summary is None: process_error_msg = f"Summarization error: {summary_error}"
                         elif not final_processing_error: process_success_message = f"Article '{content_data['title']}' processed."
                 else: process_error_msg = "Error: No URL target found for processing."
+
+            # Add article data to session state (unchanged)
             if article_data_to_add:
                  if not any(a['id'] == article_data_to_add['id'] for a in st.session_state.articles):
                       st.session_state.articles.append(article_data_to_add)
@@ -290,13 +310,13 @@ if st.session_state.processing:
 
 # --- Display Processing Results (Functional code unchanged) ---
 if 'last_process_success' in st.session_state and st.session_state.last_process_success:
-    st.success(f"✅ {st.session_state.last_process_success}") # Add icon
+    st.success(f"✅ {st.session_state.last_process_success}")
     del st.session_state.last_process_success
 if 'last_process_error' in st.session_state and st.session_state.last_process_error:
-    st.error(f"❌ {st.session_state.last_process_error}") # Add icon
+    st.error(f"❌ {st.session_state.last_process_error}")
     del st.session_state.last_process_error
 if 'last_process_warning' in st.session_state and st.session_state.last_process_warning:
-     st.warning(f"⚠️ {st.session_state.last_process_warning}") # Add icon
+     st.warning(f"⚠️ {st.session_state.last_process_warning}")
      del st.session_state.last_process_warning
 
 st.divider() # Add separator
@@ -313,7 +333,7 @@ else:
         st.session_state.selected_article_id = current_ids[0] if current_ids else None
 
     selected_id = st.selectbox(
-        "Choose article:", # Keep simplified label
+        "Choose article:",
         options=current_ids,
         format_func=lambda article_id: article_options.get(article_id, "Unknown Article"),
         index=current_ids.index(st.session_state.selected_article_id) if st.session_state.selected_article_id in current_ids else 0,
@@ -330,17 +350,17 @@ else:
         if selected_index != -1:
             article_data = st.session_state.articles[selected_index]
 
-            st.subheader(f"📄 {article_data.get('title', 'No Title')}") # Add icon
+            st.subheader(f"📄 {article_data.get('title', 'No Title')}")
             st.caption(f"Source: {'Manually Pasted Text' if article_data.get('is_manual', False) else article_data.get('id', 'Unknown URL')}")
             if article_data.get('error'):
                  st.warning(f"Processing Note: {article_data['error']}")
 
-            with st.expander("🧐 View Summary Text"): # Changed icon
+            with st.expander("🧐 View Summary Text"):
                  summary_text_display = article_data.get('summary')
                  if summary_text_display: st.write(summary_text_display)
                  else: st.info("No summary could be generated for this article.")
 
-            st.markdown("**Generate Audio:**") # Keep sub-heading
+            st.markdown("**Generate Audio:**")
             col1, col2, col3 = st.columns([1, 1, 1])
             button_key_prefix = get_valid_filename(article_data.get('id', f'no_id_{selected_index}'))[:20]
 
@@ -364,21 +384,21 @@ else:
                  delete_button = st.button("🗑️ Delete Article", key=f"del_{button_key_prefix}",
                                            disabled=st.session_state.processing)
 
-            st.divider() # Keep separator
+            st.divider()
 
-            # --- Audio Handling Placeholders ---
+            # --- Audio Handling Placeholders (Unchanged) ---
             audio_status_placeholder = st.empty()
-            audio_controls_placeholder = st.empty() # Placeholder for player + download button
+            audio_controls_placeholder = st.empty()
 
-            # --- REVERTED handle_audio_request Function ---
-            # Uses embedded <audio> tag with Base64 source
+            # --- UPDATED handle_audio_request Function ---
+            # Passes both API keys and selected fallback options to generate_audio
             def handle_audio_request(text_type, text_content):
                 audio_path_key = f"{text_type}_audio_path"
                 audio_path = article_data.get(audio_path_key)
                 audio_ready = False
                 audio_bytes = None
 
-                # 1. Check cache (Functional code unchanged)
+                # 1. Check cache (Unchanged)
                 if audio_path and os.path.exists(audio_path):
                     try:
                         with open(audio_path, "rb") as f: audio_bytes = f.read()
@@ -394,7 +414,7 @@ else:
                         st.session_state.articles[selected_index][audio_path_key] = None
                         audio_path = None
 
-                # 2. Generate if needed (Functional code unchanged)
+                # 2. Generate if needed (Updated call to generate_audio)
                 if not audio_ready:
                     is_valid_summary = text_type == "summary" and text_content
                     is_valid_full = text_type == "full" and text_content
@@ -402,36 +422,44 @@ else:
                          audio_status_placeholder.warning(f"No valid {text_type} text available to generate audio.")
                          return
 
-                    audio_status_placeholder.info(f"Generating {text_type} audio... (May take time for long text)")
+                    audio_status_placeholder.info(f"Generating {text_type} audio (using ElevenLabs primary)... (May take time for long text)")
                     with st.spinner(f"Generating {text_type} audio... This can take a while for long articles."):
                         try:
-                            filepath, audio_error = generate_audio(text_content, openai_api_key, article_data['id'], text_type, voice=st.session_state.selected_voice, speed=st.session_state.selected_speed)
+                            # **MODIFIED CALL:** Pass both keys and relevant voice/speed settings
+                            filepath, audio_error = generate_audio(
+                                text=text_content,
+                                openai_api_key=openai_api_key,        # Pass OpenAI key for potential fallback
+                                elevenlabs_api_key=elevenlabs_api_key,# Pass ElevenLabs key for primary attempt
+                                base_filename_id=article_data['id'],
+                                identifier=text_type,
+                                elevenlabs_voice_id=DEFAULT_ELEVENLABS_VOICE_ID, # Pass default EL voice
+                                openai_voice=st.session_state.selected_voice_openai, # Pass selected OpenAI voice for fallback
+                                openai_speed=st.session_state.selected_speed       # Pass selected speed for fallback
+                            )
                             if audio_error:
                                 audio_status_placeholder.error(f"Audio Generation Error: {audio_error}")
                                 st.session_state.articles[selected_index][audio_path_key] = None
                             elif filepath:
                                 st.session_state.articles[selected_index][audio_path_key] = filepath
-                                st.rerun()
+                                st.rerun() # Rerun to update the UI and display controls
                             else:
                                 audio_status_placeholder.error(f"{text_type.capitalize()} audio generation failed unexpectedly.")
                                 st.session_state.articles[selected_index][audio_path_key] = None
-                            return
+                            return # Exit after generation attempt (success or fail)
                         except Exception as e:
                             audio_status_placeholder.error(f"Unexpected Generation Error: {e}")
                             logging.error(f"TTS Exception for {text_type} of {article_data['id']}: {e}", exc_info=True)
                             st.session_state.articles[selected_index][audio_path_key] = None
-                            return
+                            return # Exit after unexpected error
 
-                # 3. Display **Embedded Player** and Download Button
+                # 3. Display Embedded Player and Download Button (Unchanged)
                 if audio_ready and audio_bytes:
                     audio_status_placeholder.empty() # Clear status messages
 
-                    # Use columns within the placeholder for layout
-                    col_player, col_download = audio_controls_placeholder.columns([3, 1]) # Give player more space
+                    col_player, col_download = audio_controls_placeholder.columns([3, 1])
 
                     with col_player:
                         try:
-                            # --- Use Embedded Base64 <audio> tag ---
                             b64 = base64.b64encode(audio_bytes).decode()
                             audio_html = f"""
                             <audio controls>
@@ -440,16 +468,12 @@ else:
                             </audio>
                             """
                             col_player.markdown(audio_html, unsafe_allow_html=True)
-                            # Add warning caption below player
                             col_player.caption("Playback within the app may struggle on mobile or with very long audio. Use Download if needed.")
-                            # --- End of Embedded Player ---
                         except Exception as player_e:
                             col_player.error(f"Error displaying audio player: {player_e}. Please use the Download button.")
 
                     with col_download:
-                        # Align download button vertically if possible (tricky without complex CSS)
-                        # Add extra space above?
-                        col_download.write("") # Little hack for vertical alignment sometimes
+                        col_download.write("")
                         download_filename = f"{get_valid_filename(article_data['title'])}_{text_type}.mp3"
                         col_download.download_button(
                             label=f"⬇️ Download MP3",
@@ -464,16 +488,22 @@ else:
             active_audio_request = None
             if read_summary_button: active_audio_request = ("summary", article_data.get('summary'))
             elif read_full_button: active_audio_request = ("full", article_data.get('full_text'))
-            if active_audio_request: handle_audio_request(active_audio_request[0], active_audio_request[1])
+
+            if active_audio_request:
+                 handle_audio_request(active_audio_request[0], active_audio_request[1])
             else:
+                 # Check if audio already exists and display it if no button was clicked
                  summary_audio_path = article_data.get('summary_audio_path')
                  full_audio_path = article_data.get('full_audio_path')
                  displayed_controls = False
+                 # Prioritize showing summary audio if available
                  if summary_audio_path and os.path.exists(summary_audio_path):
                      handle_audio_request("summary", article_data.get('summary'))
                      displayed_controls = True
+                 # If summary not shown, show full audio if available
                  if not displayed_controls and full_audio_path and os.path.exists(full_audio_path):
                      handle_audio_request("full", article_data.get('full_text'))
+
 
             # --- Delete Logic (Functional code unchanged) ---
             if delete_button:
@@ -482,7 +512,7 @@ else:
                 index_to_delete = get_article_index(id_to_delete)
                 if index_to_delete != -1:
                     deleted_article_data = st.session_state.articles.pop(index_to_delete)
-                    st.success(f"✅ Article '{deleted_article_data.get('title', 'Untitled')}' deleted.") # Add icon
+                    st.success(f"✅ Article '{deleted_article_data.get('title', 'Untitled')}' deleted.")
                     paths_to_delete = [deleted_article_data.get('full_audio_path'), deleted_article_data.get('summary_audio_path')]
                     for path in paths_to_delete:
                         if path and isinstance(path, str) and os.path.exists(path):
@@ -493,10 +523,8 @@ else:
                     audio_status_placeholder.empty()
                     audio_controls_placeholder.empty()
                     st.rerun()
-                else: st.error("❌ Could not find the article to delete (index mismatch). Please refresh.") # Add icon
+                else: st.error("❌ Could not find the article to delete (index mismatch). Please refresh.")
 
 # --- End of Script ---
 st.divider()
-st.caption("Oriana App - v1.2 (Embedded Player UI)")
-
-
+st.caption("Oriana App - v1.3 (ElevenLabs Integration)")
