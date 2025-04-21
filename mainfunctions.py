@@ -13,13 +13,14 @@ from bs4 import BeautifulSoup
 from langdetect import detect, LangDetectException
 import tempfile
 from pydub import AudioSegment
+import httpx
 
 # --- NEW: Import ElevenLabs ---
 from elevenlabs.client import ElevenLabs
 # mainfunctions.py - Corrected Line 19
 from elevenlabs import Voice, VoiceSettings
 # mainfunctions.py - Corrected Line 21
-from elevenlabs.core.api_error import APIError as ElevenLabsAPIError # Specific error for fallback check
+#from elevenlabs.core.api_error import APIError as ElevenLabsAPIError # Specific error for fallback check
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -328,22 +329,24 @@ def generate_audio(
                 logging.error(f"ElevenLabs generated audio file missing or empty for chunk {i+1}: {chunk_filepath}")
                 if os.path.exists(chunk_filepath): os.remove(chunk_filepath) # Clean up failed file
 
-        except ElevenLabsAPIError as el_api_err:
-            # Check for specific errors that trigger fallback (e.g., rate limits, auth issues)
-            status_code = getattr(el_api_err, 'status_code', None) # Check if status_code attribute exists
-            logging.warning(f"ElevenLabs API Error for chunk {i+1}: {el_api_err} (Status: {status_code})")
-            # Example fallback triggers: 401 (Auth), 429 (Rate Limit), 400 (Bad Request - sometimes quota related), 5xx (Server Error)
-            # You might need to refine these based on observed errors.
-            if status_code in [400, 401, 429] or (status_code and status_code >= 500):
-                logging.warning(f"Falling back to OpenAI TTS for chunk {i+1} due to ElevenLabs API error.")
-                # Don't set chunk_success = True, proceed to fallback
-            else:
-                # For other EL errors (e.g., potentially invalid input), log and skip chunk
-                logging.error(f"Non-fallback ElevenLabs API error for chunk {i+1}. Skipping chunk.")
-                if os.path.exists(chunk_filepath): os.remove(chunk_filepath)
-                overall_error_message = overall_error_message or f"ElevenLabs error on chunk {i+1}: {el_api_err}"
-                continue # Skip to next chunk
-
+        # --- NEW Code ---
+except httpx.HTTPStatusError as el_http_err:
+    # This catches HTTP errors like 4xx, 5xx from ElevenLabs via httpx
+    status_code = el_http_err.response.status_code
+    logging.warning(f"ElevenLabs HTTP Error for chunk {i+1}: {el_http_err} (Status: {status_code})")
+    # Fallback triggers: 401 (Auth), 429 (Rate Limit/Quota), 400 (Bad Request - sometimes quota/input), 5xx (Server Error)
+    # You might refine these based on testing.
+    if status_code in [400, 401, 429] or status_code >= 500:
+         logging.warning(f"Falling back to OpenAI TTS for chunk {i+1} due to ElevenLabs HTTP error (Status: {status_code}).")
+         # Don't set chunk_success = True, proceed to fallback
+    else:
+         # For other HTTP errors (e.g., 403 Forbidden if not auth, 404 not found, etc.)
+         # Treat as non-fallback errors for now, log and skip chunk.
+         logging.error(f"Non-fallback ElevenLabs HTTP error for chunk {i+1} (Status: {status_code}). Skipping chunk.")
+         if os.path.exists(chunk_filepath): os.remove(chunk_filepath)
+         overall_error_message = overall_error_message or f"ElevenLabs HTTP error {status_code} on chunk {i+1}"
+         continue # Skip to next chunk
+# --- End NEW Code ---
         except Exception as el_general_err:
             # Catch other potential errors during ElevenLabs generation
             logging.error(f"Unexpected error during ElevenLabs TTS for chunk {i+1}: {el_general_err}", exc_info=True)
