@@ -105,7 +105,7 @@ st.divider() # Add a visual separator
 MAX_ARTICLES = 5
 TTS_VOICES_OPENAI = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] # For Fallback
 TTS_SPEEDS = {"Normal": 1.0, "Slightly Faster": 1.15, "Faster": 1.25, "Fastest": 1.5} # Primarily for Fallback
-DEFAULT_ELEVENLABS_VOICE_ID = "KDImLuG6RkuyuX5httC7" # Example - Choose a preferred default voice ID
+DEFAULT_ELEVENLABS_VOICE_ID = "oWAxZDx7w5VEj9dCyTzz" # Example - Choose a preferred default voice ID
 
 # --- Check for API Keys ---
 # OpenAI API Key Check (Unchanged)
@@ -181,7 +181,8 @@ def create_manual_id(title):
 
 # --- Sidebar Audio Settings (Updated labels for clarity) ---
 st.sidebar.header("🎧 Audio Settings")
-st.sidebar.info(f"Primary TTS uses ElevenLabs (Voice: {DEFAULT_ELEVENLABS_VOICE_ID}). Settings below apply to the OpenAI fallback.")
+#st.sidebar.info(f"Primary TTS uses ElevenLabs (Voice: {DEFAULT_ELEVENLABS_VOICE_ID}). Settings below apply to the OpenAI fallback.")
+st.sidebar.info(f"Primary TTS uses ElevenLabs (Voice: Grace). Settings below apply to the OpenAI fallback.")
 st.session_state.selected_voice_openai = st.sidebar.selectbox(
     "Select Fallback Voice (OpenAI):", options=TTS_VOICES_OPENAI,
     index=TTS_VOICES_OPENAI.index(st.session_state.selected_voice_openai),
