@@ -16,7 +16,8 @@ from pydub import AudioSegment
 
 # --- NEW: Import ElevenLabs ---
 from elevenlabs.client import ElevenLabs
-from elevenlabs import Voice, VoiceSettings, generate as elevenlabs_generate
+# mainfunctions.py - Corrected Line 19
+from elevenlabs import Voice, VoiceSettings
 from elevenlabs import APIError as ElevenLabsAPIError # Specific error for fallback check
 
 # Configure logging
