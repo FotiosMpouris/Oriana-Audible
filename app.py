@@ -105,7 +105,7 @@ st.divider() # Add a visual separator
 MAX_ARTICLES = 5
 TTS_VOICES_OPENAI = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"] # For Fallback
 TTS_SPEEDS = {"Normal": 1.0, "Slightly Faster": 1.15, "Faster": 1.25, "Fastest": 1.5} # Primarily for Fallback
-DEFAULT_ELEVENLABS_VOICE_ID = "LcfcDJNUP1GQjkzn1xUU" # Example - Choose a preferred default voice ID
+DEFAULT_ELEVENLABS_VOICE_ID = "nviIxwIM7XCqMBJ8ea9D" # Example - Choose a preferred default voice ID
 
 # --- Check for API Keys ---
 # OpenAI API Key Check (Unchanged)
