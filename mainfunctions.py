@@ -238,9 +238,10 @@ def generate_audio(
         EL_TIMEOUT = 180  # seconds
 
         elevenlabs_client = ElevenLabs(
-        api_key=elevenlabs_api_key,
-        timeout=EL_TIMEOUT)
-            logging.info("ElevenLabs client initialized.")
+            api_key=elevenlabs_api_key,
+            timeout=EL_TIMEOUT
+        )
+        logging.info("ElevenLabs client initialized.")
         
     except Exception as el_init_err:
         logging.error(f"Failed to initialize ElevenLabs client: {el_init_err}. Audio generation will likely fail.")
