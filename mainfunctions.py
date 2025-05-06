@@ -241,6 +241,7 @@ def generate_audio(
         api_key=elevenlabs_api_key,
         timeout=EL_TIMEOUT)
             logging.info("ElevenLabs client initialized.")
+        
     except Exception as el_init_err:
         logging.error(f"Failed to initialize ElevenLabs client: {el_init_err}. Audio generation will likely fail.")
         # Fallback won't work without client, so return error early
@@ -258,7 +259,7 @@ def generate_audio(
 
 
     # --- Chunking Logic (Unchanged OpenAI TTS limits, EL limits might differ but chunking helps both) ---
-    max_chars_per_chunk = 4000 # Use a reasonable limit safe for both APIs
+    max_chars_per_chunk = 2500 # Use a reasonable limit safe for both APIs
     text_chunks = []
     paragraphs = text.split('\n')
     current_chunk = ""
