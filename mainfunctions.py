@@ -233,20 +233,20 @@ def generate_audio(
     final_filepath = os.path.join(AUDIO_DIR, final_filename)
 
    # --- Initialize API Clients (Outside loop for efficiency) ---
-    try:
-        # ① give the SDK a longer timeout so big chunks finish downloading
-        EL_TIMEOUT = 180  # seconds
+        try:
+            # ① give the SDK a longer timeout so big chunks finish downloading
+            EL_TIMEOUT = 180  # seconds
 
-        elevenlabs_client = ElevenLabs(
-            api_key=elevenlabs_api_key,
-            timeout=EL_TIMEOUT
-        )
-        logging.info("ElevenLabs client initialized.")
+            elevenlabs_client = ElevenLabs(
+                api_key=elevenlabs_api_key,
+                timeout=EL_TIMEOUT
+            )
+            logging.info("ElevenLabs client initialized.")
         
-    except Exception as el_init_err:
-        logging.error(f"Failed to initialize ElevenLabs client: {el_init_err}. Audio generation will likely fail.")
+        except Exception as el_init_err:
+            logging.error(f"Failed to initialize ElevenLabs client: {el_init_err}. Audio generation will likely fail.")
         # Fallback won't work without client, so return error early
-        return None, f"Failed to initialize ElevenLabs client: {el_init_err}"
+            return None, f"Failed to initialize ElevenLabs client: {el_init_err}"
 
 
     try:
