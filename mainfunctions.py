@@ -235,7 +235,7 @@ def generate_audio(
    # --- Initialize API Clients (Outside loop for efficiency) ---
         try:
             # ① give the SDK a longer timeout so big chunks finish downloading
-            EL_TIMEOUT = 180  # seconds
+            EL_TIMEOUT = 300  # seconds
 
             elevenlabs_client = ElevenLabs(
                 api_key=elevenlabs_api_key,
@@ -260,7 +260,7 @@ def generate_audio(
 
 
     # --- Chunking Logic (Unchanged OpenAI TTS limits, EL limits might differ but chunking helps both) ---
-    max_chars_per_chunk = 2500 # Use a reasonable limit safe for both APIs
+    max_chars_per_chunk = 2000 # Use a reasonable limit safe for both APIs
     text_chunks = []
     paragraphs = text.split('\n')
     current_chunk = ""
