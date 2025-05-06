@@ -6,6 +6,6 @@ beautifulsoup4>=4.11
 newspaper3k>=0.2.8
 lxml_html_clean>=0.1.0
 langdetect>=1.0.9
-elevenlabs>=0.3.0
+elevenlabs>=1.0.2
 pydub>=0.25.1
 httpx>=0.24.0
